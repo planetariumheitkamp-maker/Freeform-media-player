@@ -169,7 +169,7 @@ export function WarpWorkspace() {
       new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(-WORKSPACE_WIDTH / 2, -WORKSPACE_HEIGHT / 2, -80),
         new THREE.Vector3(WORKSPACE_WIDTH / 2, -WORKSPACE_HEIGHT / 2, -80),
-        new THREE.Vector3(-WORKSPACE_WIDTH / 2, WORKSPACE_HEIGHT / 2, -80),
+        new THREE.Vector3(WORKSPACE_WIDTH / 2, WORKSPACE_HEIGHT / 2, -80),
         new THREE.Vector3(-WORKSPACE_WIDTH / 2, WORKSPACE_HEIGHT / 2, -80),
       ]),
       new THREE.LineBasicMaterial({ color: '#505752', depthTest: false }),
