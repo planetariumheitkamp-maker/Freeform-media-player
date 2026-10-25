@@ -7,7 +7,7 @@ export function normalizeGroups(
 ): { players: Player[]; groups: LinkGroup[] } {
   const memberCounts = new Map<string, number>();
   players.forEach((player) => {
-    if (player.groupId) memberCounts.set(player.groupId, (memberCounts.get(groupId) ?? 0) + 1);
+    if (player.groupId) memberCounts.set(player.groupId, (memberCounts.get(player.groupId) ?? 0) + 1);
   });
   const normalizedGroups = groups.filter((group) => (memberCounts.get(group.id) ?? 0) >= 2);
   const groupIds = new Set(normalizedGroups.map((group) => group.id));
