@@ -1,5 +1,7 @@
 # Freeform Media Player
 
+[![Download for Windows](https://img.shields.io/badge/Download_for_Windows-64--bit-2563eb?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/planetariumheitkamp-maker/freeform-media-player/releases/latest/download/Freeform-0.1.0-win-x64.exe)
+
 Freeform is a cross-platform desktop media compositor. Each player is a live GPU surface whose image continuously follows its editable border and interior mesh—not a crop, mask, or CSS transform.
 
 Use it to combine movies, audio, still images, network streams, capture devices, and externally running games or applications in one workspace. Players can remain independent or be linked in arbitrary subsets.
