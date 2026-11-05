@@ -3,7 +3,7 @@ import hlsWorkerUrl from 'hls.js/dist/hls.worker.js?url';
 import { useCallback, useEffect, useRef, type RefObject } from 'react';
 import { formatTime } from '../lib/format';
 import { useWorkspace } from '../store/useWorkspace';
-import type { MediaSource, Player } from '../types';
+import type { MediaSource, Player, TestPatternKind } from '../types';
 import { useMedia, type TextureSource } from './MediaContext';
 
 const CANVAS_WIDTH = 640;
@@ -133,25 +133,82 @@ function drawFrameLabel(context: CanvasRenderingContext2D, label: string, x: num
   context.fillText(label, x, y);
 }
 
-function drawTestCard(canvas: HTMLCanvasElement) {
+function drawTestCard(canvas: HTMLCanvasElement, pattern: TestPatternKind = 'orientation') {
   const context = canvas.getContext('2d');
   if (!context) return;
   const { width, height } = canvas;
   context.fillStyle = '#111312';
   context.fillRect(0, 0, width, height);
+  context.lineWidth = 1;
+  if (pattern === 'starfield') {
+    let seed = 971;
+    const random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    for (let index = 0; index < 220; index += 1) {
+      const radius = index % 17 === 0 ? 2.1 : 0.55 + random() * 0.85;
+      context.fillStyle = index % 9 === 0 ? '#2cc9ff' : '#e6ebe6';
+      context.beginPath();
+      context.arc(random() * width, random() * height, radius, 0, Math.PI * 2);
+      context.fill();
+    }
+    context.fillStyle = '#c5ffc3';
+    context.font = '13px "Fira Mono", monospace';
+    context.fillText('STARFIELD / FIXED SEED 971', 24, height - 24);
+    return;
+  }
+  if (pattern === 'convergence') {
+    const targets = [[0.5, 0.5], [0.18, 0.22], [0.82, 0.22], [0.18, 0.78], [0.82, 0.78]];
+    targets.forEach(([x, y], index) => {
+      const cx = x * width;
+      const cy = y * height;
+      context.strokeStyle = index ? '#2cc9ff' : '#c5ffc3';
+      for (const radius of [12, 28, 48]) {
+        context.beginPath(); context.arc(cx, cy, radius, 0, Math.PI * 2); context.stroke();
+      }
+      context.beginPath();
+      context.moveTo(cx - 62, cy); context.lineTo(cx + 62, cy);
+      context.moveTo(cx, cy - 62); context.lineTo(cx, cy + 62); context.stroke();
+      drawFrameLabel(context, `TARGET ${index + 1}`, cx - 38, cy + 75);
+    });
+    return;
+  }
+  if (pattern === 'latitude') {
+    context.save();
+    context.translate(width / 2, height / 2);
+    context.strokeStyle = 'rgba(44,201,255,.7)';
+    for (let ring = 1; ring <= 6; ring += 1) {
+      context.beginPath(); context.ellipse(0, 0, ring * 48, ring * 25, 0, 0, Math.PI * 2); context.stroke();
+    }
+    for (let spoke = 0; spoke < 24; spoke += 1) {
+      const angle = spoke / 24 * Math.PI * 2;
+      context.beginPath(); context.moveTo(0, 0); context.lineTo(Math.cos(angle) * 288, Math.sin(angle) * 150); context.stroke();
+    }
+    context.restore();
+    context.fillStyle = '#c5ffc3';
+    context.font = '13px "Fira Mono", monospace';
+    context.fillText('ZENITH', width / 2 - 26, height / 2 - 12);
+    drawFrameLabel(context, 'AZIMUTH 0°', width - 106, height / 2 - 12);
+    return;
+  }
+  context.strokeStyle = pattern === 'crosshatch' ? 'rgba(197,255,195,.48)' : 'rgba(197,255,195,.22)';
+  for (let x = 0; x <= width; x += 40) {
+    context.lineWidth = x % 200 === 0 ? 2 : 1;
+    context.beginPath(); context.moveTo(x, 0); context.lineTo(x, height); context.stroke();
+  }
+  for (let y = 0; y <= height; y += 40) {
+    context.lineWidth = y % 200 === 0 ? 2 : 1;
+    context.beginPath(); context.moveTo(0, y); context.lineTo(width, y); context.stroke();
+  }
+  if (pattern === 'crosshatch') {
+    context.fillStyle = '#c5ffc3';
+    context.font = '13px "Fira Mono", monospace';
+    context.fillText('CROSSHATCH / 40 PX', 24, height - 24);
+    return;
+  }
   const colors = ['#c5ffc3', '#2cc9ff', '#e6d36b', '#e78282'];
   colors.forEach((color, index) => {
     context.fillStyle = color;
     context.fillRect(index * width / 4, 0, width / 4, 22);
   });
-  context.strokeStyle = 'rgba(197,255,195,.22)';
-  context.lineWidth = 1;
-  for (let x = 0; x <= width; x += 40) {
-    context.beginPath(); context.moveTo(x, 0); context.lineTo(x, height); context.stroke();
-  }
-  for (let y = 0; y <= height; y += 40) {
-    context.beginPath(); context.moveTo(0, y); context.lineTo(width, y); context.stroke();
-  }
   context.strokeStyle = '#c5ffc3';
   context.lineWidth = 2;
   context.strokeRect(14, 14, width - 28, height - 28);
@@ -181,14 +238,14 @@ function drawTestCard(canvas: HTMLCanvasElement) {
   context.fill();
 }
 
-function TestCanvas({ player }: { player: Player }) {
+function TestCanvas({ player, source }: { player: Player; source: MediaSource }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const refresh = useTextureRegistration(player.id, ref);
   useEffect(() => {
     if (!ref.current) return;
-    drawTestCard(ref.current);
+    drawTestCard(ref.current, source.testPattern);
     refresh();
-  }, [refresh]);
+  }, [refresh, source.testPattern]);
   return <canvas ref={ref} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} />;
 }
 
@@ -392,7 +449,7 @@ function AudioSurface({ player, source }: { player: Player; source: MediaSource 
 function PlayerMedia({ player, source }: { player: Player; source: MediaSource }) {
   const { getStream } = useMedia();
   if (!source.connected) return <StatusCanvas player={player} source={source} />;
-  if (source.mediaType === 'test') return <TestCanvas player={player} />;
+  if (source.mediaType === 'test') return <TestCanvas player={player} source={source} />;
   if (source.live) {
     const stream = getStream(source.id);
     return stream

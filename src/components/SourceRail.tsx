@@ -1,5 +1,6 @@
 import {
   Camera,
+  ChevronsLeft,
   Eye,
   EyeOff,
   FilePlus2,
@@ -21,6 +22,7 @@ import {
 import { useState, type FormEvent } from 'react';
 import { TEST_SOURCE } from '../data/defaults';
 import { sourceTypeLabel } from '../lib/format';
+import { relinkSourcesByFilename } from '../lib/project';
 import { listCaptureDevices, runtime } from '../lib/runtime';
 import { connectLiveSource, sourceFromFile } from '../lib/sourceActions';
 import { useWorkspace } from '../store/useWorkspace';
@@ -40,7 +42,7 @@ function SourceIcon({ source, size = 15 }: { source: MediaSource; size?: number 
 
 type DialogName = 'stream' | 'desktop' | 'device' | null;
 
-export function SourceRail() {
+export function SourceRail({ onMinimize }: { onMinimize: () => void }) {
   const sources = useWorkspace((state) => state.sources);
   const players = useWorkspace((state) => state.players);
   const groups = useWorkspace((state) => state.groups);
@@ -86,6 +88,23 @@ export function SourceRail() {
       });
     } catch (error) {
       pushToast({ title: 'Files could not be added', detail: error instanceof Error ? error.message : undefined, tone: 'error' });
+    }
+  };
+
+  const relinkMissing = async () => {
+    try {
+      const files = await runtime.openLocalFiles();
+      if (!files.length) return;
+      const result = relinkSourcesByFilename(useWorkspace.getState().sources, files);
+      registerSources(result.sources);
+      const missing = result.sources.filter((source) => source.kind === 'file' && !source.connected).length;
+      pushToast({
+        title: `${result.count} ${result.count === 1 ? 'source' : 'sources'} relinked`,
+        detail: missing ? `${missing} disconnected ${missing === 1 ? 'file remains' : 'files remain'}. Match filenames or reconnect individually.` : 'All local media is connected.',
+        tone: result.count ? 'success' : 'warning',
+      });
+    } catch (error) {
+      pushToast({ title: 'Batch relink failed', detail: error instanceof Error ? error.message : undefined, tone: 'error' });
     }
   };
 
@@ -226,7 +245,10 @@ export function SourceRail() {
       <section className="rail-section sources-section">
         <div className="section-heading">
           <span>SOURCES</span>
-          <span className="count-badge">{sources.length}</span>
+          <div className="section-heading-actions">
+            <span className="count-badge">{sources.length}</span>
+            <button className="icon-button tiny" title="Minimize sources and players panel" aria-label="Minimize sources and players panel" onClick={onMinimize}><ChevronsLeft size={14} /></button>
+          </div>
         </div>
         <div className="source-actions">
           <button onClick={() => void addFiles()}><FilePlus2 size={15} /><span>Files</span></button>
@@ -234,6 +256,7 @@ export function SourceRail() {
           <button onClick={() => void openDesktop()}><Monitor size={15} /><span>Screen</span></button>
           <button onClick={() => void openDevices()}><Camera size={15} /><span>Device</span></button>
         </div>
+        <button className="button subtle full-width relink-button" disabled={!sources.some((source) => source.kind === 'file' && !source.connected)} onClick={() => void relinkMissing()}><RefreshCw size={13} />Relink missing media</button>
         <div className="source-list scrollable">
           {sources.map((source) => {
             const assigned = active?.sourceId === source.id;

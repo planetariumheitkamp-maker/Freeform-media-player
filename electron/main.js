@@ -79,6 +79,15 @@ function registerProjectHandlers() {
     return result.canceled ? [] : result.filePaths.map(describeFile);
   });
 
+  ipcMain.handle('media:open-background', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Import a custom grid',
+      properties: ['openFile'],
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }],
+    });
+    return result.canceled || !result.filePaths[0] ? null : describeFile(result.filePaths[0]);
+  });
+
   ipcMain.handle('media:authorize', async (_event, paths) => {
     const urls = {};
     if (!Array.isArray(paths)) return urls;
@@ -97,7 +106,7 @@ function registerProjectHandlers() {
   ipcMain.handle('project:save', async (_event, defaultName, content) => {
     const safeName = String(defaultName || 'Freeform workspace').replace(/[\\/:*?"<>|]/g, '-');
     const result = await dialog.showSaveDialog(mainWindow, {
-      title: 'Export workspace',
+      title: 'Save workspace',
       defaultPath: path.join(app.getPath('documents'), `${safeName}.freeform.json`),
       filters: [{ name: 'Freeform workspace', extensions: ['freeform.json', 'json'] }],
     });
@@ -108,7 +117,7 @@ function registerProjectHandlers() {
 
   ipcMain.handle('project:open', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
-      title: 'Import workspace',
+      title: 'Open workspace',
       properties: ['openFile'],
       filters: [{ name: 'Freeform workspace', extensions: ['freeform.json', 'json'] }],
     });

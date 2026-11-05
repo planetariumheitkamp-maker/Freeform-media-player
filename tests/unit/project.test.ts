@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createPlayer, TEST_SOURCE } from '../../src/data/defaults';
-import { parseProject, reauthorizeProjectFiles, serializeProject } from '../../src/lib/project';
+import { DEFAULT_PLANETARIUM_SETTINGS } from '../../src/lib/dome';
+import { parseProject, reauthorizeProjectBackground, reauthorizeProjectFiles, serializeProject } from '../../src/lib/project';
 import type { MediaSource } from '../../src/types';
 
 function localSource(): MediaSource {
@@ -71,6 +72,34 @@ describe('project persistence', () => {
     expect(project.players[0].rate).toBe(0.1);
   });
 
+  it('supplies legacy media transform defaults and validates independent media scaling', () => {
+    const legacyPlayer: Record<string, unknown> = { ...createPlayer(1) };
+    delete legacyPlayer.mediaRotation;
+    delete legacyPlayer.mediaScale;
+    const base = {
+      format: 'freeform-workspace', version: 1, name: 'Media transforms', sources: [TEST_SOURCE],
+      players: [legacyPlayer], groups: [],
+    };
+    const legacy = parseProject(JSON.stringify(base));
+    expect(legacy.players[0].mediaRotation).toBe(0);
+    expect(legacy.players[0].mediaScale).toBe(1);
+
+    const clamped = parseProject(JSON.stringify({
+      ...base,
+      players: [{ ...createPlayer(1), mediaRotation: 0.75, mediaScale: 99 }],
+    }));
+    expect(clamped.players[0].mediaRotation).toBe(0.75);
+    expect(clamped.players[0].mediaScale).toBe(10);
+    expect(parseProject(JSON.stringify({
+      ...base,
+      players: [{ ...createPlayer(1), mediaScale: -2 }],
+    })).players[0].mediaScale).toBe(0.1);
+    expect(() => parseProject(JSON.stringify({
+      ...base,
+      players: [{ ...createPlayer(1), mediaScale: 'large' }],
+    }))).toThrow('invalid player or mesh');
+  });
+
   it('rejects malformed projects and oversized meshes', () => {
     expect(() => parseProject('{}')).toThrow('not a supported');
     const player = createPlayer(1);
@@ -92,5 +121,220 @@ describe('project persistence', () => {
     const missing = await reauthorizeProjectFiles([source], async () => ({}));
     expect(missing.get(source.id)?.connected).toBe(false);
     expect(missing.get(source.id)?.detail).toContain('unavailable');
+  });
+
+  it('round-trips a custom grid reference without its session URL', () => {
+    const content = serializeProject({
+      projectName: 'Grid study',
+      sources: [TEST_SOURCE],
+      players: [createPlayer(1)],
+      groups: [],
+      background: {
+        name: 'alignment-grid.png',
+        path: 'C:/grids/alignment-grid.png',
+        uri: 'freeform-media://local/grid-session',
+        mime: 'image/png',
+      },
+    });
+    const project = parseProject(content);
+    expect(project.background?.name).toBe('alignment-grid.png');
+    expect(project.background?.path).toBe('C:/grids/alignment-grid.png');
+    expect(project.background?.mime).toBe('image/png');
+    expect(project.background?.uri).toBeUndefined();
+    expect(content).not.toContain('freeform-media://local/grid-session');
+  });
+
+  it('reauthorizes a saved grid and leaves missing or browser-only references unavailable', async () => {
+    const background = { name: 'grid.png', path: 'C:/grids/grid.png', mime: 'image/png' };
+    const restored = await reauthorizeProjectBackground(background, async (paths) => {
+      expect(paths).toEqual(['C:/grids/grid.png']);
+      return { 'C:/grids/grid.png': 'freeform-media://local/restored-grid' };
+    });
+    expect(restored?.uri).toBe('freeform-media://local/restored-grid');
+    const missing = await reauthorizeProjectBackground(background, async () => ({}));
+    expect(missing?.uri).toBeUndefined();
+    const browserOnly = await reauthorizeProjectBackground({ name: 'browser.png', uri: 'blob:grid-session' }, async () => ({}));
+    expect(browserOnly?.uri).toBeUndefined();
+    expect(await reauthorizeProjectBackground(null, async () => ({}))).toBeNull();
+  });
+
+  it('rejects an invalid custom grid reference', () => {
+    const content = JSON.stringify({
+      format: 'freeform-workspace', version: 1, name: 'Invalid grid', sources: [TEST_SOURCE],
+      players: [createPlayer(1)], groups: [], background: { name: 42 },
+    });
+    expect(() => parseProject(content)).toThrow('invalid background');
+  });
+
+  it('round-trips built-in grid geometry and supplies legacy defaults', () => {
+    const gridGeometry = {
+      kind: 'circular' as const, spacing: 95, rotation: 25, skewX: 18, skewY: -12,
+      rings: 12, spokes: 36, radius: 75,
+    };
+    const content = serializeProject({
+      projectName: 'Geometric grid', sources: [TEST_SOURCE], players: [createPlayer(1)], groups: [], gridGeometry,
+    });
+    expect(parseProject(content).grid).toEqual(gridGeometry);
+    const legacy = JSON.stringify({
+      format: 'freeform-workspace', version: 1, name: 'Legacy', sources: [TEST_SOURCE],
+      players: [createPlayer(1)], groups: [],
+    });
+    expect(parseProject(legacy).grid).toEqual({
+      kind: 'cartesian', spacing: 50, rotation: 0, skewX: 0, skewY: 0,
+      rings: 8, spokes: 24, radius: 90,
+    });
+  });
+
+  it('clamps imported geometry and rejects malformed values', () => {
+    const base = {
+      format: 'freeform-workspace', version: 1, name: 'Grid limits', sources: [TEST_SOURCE],
+      players: [createPlayer(1)], groups: [],
+    };
+    const clamped = parseProject(JSON.stringify({
+      ...base,
+      grid: {
+        kind: 'circular', spacing: 1000, rotation: -500, skewX: 80, skewY: -90,
+        rings: 99, spokes: 2, radius: 120,
+      },
+    }));
+    expect(clamped.grid).toEqual({
+      kind: 'circular', spacing: 400, rotation: -180, skewX: 45, skewY: -45,
+      rings: 32, spokes: 4, radius: 100,
+    });
+    expect(() => parseProject(JSON.stringify({
+      ...base, grid: { spacing: 'wide', rotation: 0, skewX: 0, skewY: 0 },
+    }))).toThrow('invalid built-in grid geometry');
+  });
+
+  it('round-trips circular grid snapping and validates legacy and malformed values', () => {
+    const content = serializeProject({
+      projectName: 'Snapping study', sources: [TEST_SOURCE], players: [createPlayer(1)], groups: [],
+      gridGeometry: {
+        kind: 'circular', spacing: 50, rotation: 0, skewX: 0, skewY: 0,
+        rings: 8, spokes: 24, radius: 90,
+      },
+      gridSnapping: true,
+    });
+    expect(parseProject(content).gridSnapping).toBe(true);
+    const legacy = JSON.stringify({
+      format: 'freeform-workspace', version: 1, name: 'Legacy snapping', sources: [TEST_SOURCE],
+      players: [createPlayer(1)], groups: [],
+    });
+    expect(parseProject(legacy).gridSnapping).toBe(false);
+    expect(() => parseProject(JSON.stringify({
+      ...JSON.parse(legacy), gridSnapping: 'enabled',
+    }))).toThrow('invalid grid snapping');
+  });
+
+  it('round-trips output dimensions and opacity, supplies legacy defaults, and rejects malformed values', () => {
+    const content = serializeProject({
+      projectName: 'Output study', sources: [TEST_SOURCE], players: [createPlayer(1)], groups: [],
+      outputSize: { width: 2048, height: 2048 }, outputOpacity: 0.35,
+    });
+    expect(parseProject(content).output).toEqual({ width: 2048, height: 2048 });
+    expect(parseProject(content).outputOpacity).toBe(0.35);
+    const legacy = JSON.stringify({
+      format: 'freeform-workspace', version: 1, name: 'Legacy output', sources: [TEST_SOURCE],
+      players: [createPlayer(1)], groups: [],
+    });
+    expect(parseProject(legacy).output).toEqual({ width: 1600, height: 900 });
+    expect(parseProject(legacy).outputOpacity).toBe(1);
+    const clamped = parseProject(JSON.stringify({
+      ...JSON.parse(legacy), output: { width: 1, height: 99999 }, outputOpacity: -4,
+    }));
+    expect(clamped.output).toEqual({ width: 160, height: 7680 });
+    expect(clamped.outputOpacity).toBe(0);
+    expect(() => parseProject(JSON.stringify({
+      ...JSON.parse(legacy), output: { width: 'wide', height: 900 },
+    }))).toThrow('invalid output size');
+    expect(() => parseProject(JSON.stringify({
+      ...JSON.parse(legacy), outputOpacity: 'transparent',
+    }))).toThrow('invalid output opacity');
+  });
+
+  it('round-trips projection quality with legacy defaults and import validation', () => {
+    const content = serializeProject({
+      projectName: 'Projection quality', sources: [TEST_SOURCE], players: [createPlayer(1)], groups: [],
+      renderQuality: 'ultra',
+    });
+    expect(parseProject(content).quality).toBe('ultra');
+    const legacy = JSON.stringify({
+      format: 'freeform-workspace', version: 1, name: 'Legacy quality', sources: [TEST_SOURCE],
+      players: [createPlayer(1)], groups: [],
+    });
+    expect(parseProject(legacy).quality).toBe('standard');
+    expect(parseProject(JSON.stringify({ ...JSON.parse(legacy), quality: 'high' })).quality).toBe('high');
+    expect(() => parseProject(JSON.stringify({
+      ...JSON.parse(legacy), quality: 'lossless',
+    }))).toThrow('invalid projection quality');
+  });
+
+  it('round-trips trace settings, supplies legacy defaults, and validates imported values', () => {
+    const content = serializeProject({
+      projectName: 'Trace study', sources: [TEST_SOURCE], players: [createPlayer(1)], groups: [],
+      traceSettings: { smoothing: 12, interiorSpacing: 64, sourceMapping: 'whole' },
+    });
+    expect(parseProject(content).trace).toEqual({ smoothing: 12, interiorSpacing: 64, sourceMapping: 'whole' });
+    const legacy = JSON.stringify({
+      format: 'freeform-workspace', version: 1, name: 'Legacy trace', sources: [TEST_SOURCE],
+      players: [createPlayer(1)], groups: [],
+    });
+    expect(parseProject(legacy).trace).toEqual({ smoothing: 2.5, interiorSpacing: 24, sourceMapping: 'crop' });
+    expect(parseProject(JSON.stringify({
+      ...JSON.parse(legacy), trace: { smoothing: 12, interiorSpacing: 64 },
+    })).trace).toEqual({ smoothing: 12, interiorSpacing: 64, sourceMapping: 'crop' });
+    expect(parseProject(JSON.stringify({
+      ...JSON.parse(legacy), trace: { smoothing: 99.25, interiorSpacing: 2.4 },
+    })).trace).toEqual({ smoothing: 20, interiorSpacing: 8, sourceMapping: 'crop' });
+    expect(() => parseProject(JSON.stringify({
+      ...JSON.parse(legacy), trace: { smoothing: 'smooth', interiorSpacing: 24 },
+    }))).toThrow('invalid trace settings');
+    expect(() => parseProject(JSON.stringify({
+      ...JSON.parse(legacy), trace: { smoothing: 2.5, interiorSpacing: 24, sourceMapping: 'stretch' },
+    }))).toThrow('invalid trace settings');
+  });
+
+  it('round-trips planetarium settings and per-player dome warp with legacy defaults and validation', () => {
+    const content = serializeProject({
+      projectName: 'Dome study',
+      sources: [TEST_SOURCE],
+      players: [{ ...createPlayer(1), domeWarp: true }],
+      groups: [],
+      planetariumSettings: { enabled: true, fov: 160, tilt: 12, offsetX: -8, offsetY: 15 },
+    });
+    const project = parseProject(content);
+    expect(project.planetarium).toEqual({
+      ...DEFAULT_PLANETARIUM_SETTINGS,
+      enabled: true, fov: 160, tilt: 12, offsetX: -8, offsetY: 15,
+    });
+    expect(project.players[0].domeWarp).toBe(true);
+    expect(project.players[0].domePrewarped).toBe(false);
+
+    const legacyPlayer: Record<string, unknown> = { ...createPlayer(1) };
+    delete legacyPlayer.domeWarp;
+    delete legacyPlayer.domePrewarped;
+    const legacy = JSON.stringify({
+      format: 'freeform-workspace', version: 1, name: 'Legacy dome', sources: [TEST_SOURCE],
+      players: [legacyPlayer], groups: [],
+    });
+    const legacyProject = parseProject(legacy);
+    expect(legacyProject.players[0].domeWarp).toBe(false);
+    expect(legacyProject.players[0].domePrewarped).toBe(false);
+    expect(legacyProject.planetarium).toEqual(DEFAULT_PLANETARIUM_SETTINGS);
+
+    const clamped = parseProject(JSON.stringify({
+      ...JSON.parse(legacy),
+      planetarium: { enabled: true, fov: 240, tilt: -99, offsetX: -90, offsetY: 80 },
+    }));
+    expect(clamped.planetarium).toEqual({
+      ...DEFAULT_PLANETARIUM_SETTINGS,
+      enabled: true, fov: 180, tilt: -45, offsetX: -50, offsetY: 50,
+    });
+    expect(() => parseProject(JSON.stringify({
+      ...JSON.parse(legacy), planetarium: { fov: 'wide' },
+    }))).toThrow('invalid planetarium settings');
+    expect(() => parseProject(JSON.stringify({
+      ...JSON.parse(legacy), players: [{ ...createPlayer(1), domeWarp: 'yes' }],
+    }))).toThrow('invalid player or mesh');
   });
 });

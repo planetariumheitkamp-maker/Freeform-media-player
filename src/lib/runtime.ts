@@ -12,12 +12,12 @@ function fileMediaType(file: File): OpenedMedia['mediaType'] {
   return 'video';
 }
 
-function pickFiles(accept: string): Promise<File[]> {
+function pickFiles(accept: string, multiple = true): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = accept;
-    input.multiple = true;
+    input.multiple = multiple;
     input.style.display = 'none';
     document.body.appendChild(input);
     input.addEventListener('change', () => {
@@ -44,6 +44,16 @@ const browserBridge: FreeformBridge = {
       mime: file.type || undefined,
       mediaType: fileMediaType(file),
     }));
+  },
+  async openBackgroundImage() {
+    const [file] = await pickFiles('image/*', false);
+    if (!file) return null;
+    return {
+      name: file.name,
+      url: URL.createObjectURL(file),
+      mime: file.type || undefined,
+      mediaType: 'image' as const,
+    };
   },
   async authorizeMedia() {
     return {};

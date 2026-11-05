@@ -63,6 +63,9 @@ jobs:
         run: npm run dist
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Verify packaged Windows app
+        if: matrix.os == 'windows-latest'
+        run: npm run test:desktop
       - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
@@ -73,3 +76,63 @@ jobs:
             release/*.exe
             release/*.zip
           if-no-files-found: error
+
+  release:
+    name: Publish latest Windows download
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download Windows packages
+        uses: actions/download-artifact@v4
+        with:
+          name: freeform-Windows
+          path: release
+      - name: Publish latest release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          installers=(release/Freeform-*-win-x64.exe)
+          if [[ ${#installers[@]} -ne 1 ]]; then
+            echo "Expected exactly one Windows installer, found ${#installers[@]}."
+            exit 1
+          fi
+          installer="${installers[0]}"
+          archive="${installer%.exe}.zip"
+          test -f "$archive"
+          version="${installer##*Freeform-}"
+          version="${version%-win-x64.exe}"
+          checksum="$(sha256sum "$installer")"
+          checksum="${checksum%% *}"
+          cat > release-notes.md <<EOF
+          ## Download for Windows
+
+          Download and run \`${installer##*/}\` to install Freeform on 64-bit Windows.
+
+          For the portable version, download \`${archive##*/}\`, extract it, and run \`Freeform.exe\`.
+
+          Built from commit \`${GITHUB_SHA}\` after renderer, unit, browser, and packaged-desktop tests passed.
+
+          The installer is unsigned, so Windows SmartScreen may request confirmation.
+
+          SHA-256: \`${checksum}\`
+          EOF
+          tag="windows-build-${GITHUB_RUN_NUMBER}"
+          title="Freeform ${version} for Windows (build ${GITHUB_RUN_NUMBER})"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" "$installer" "$archive" --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --title "$title" --notes-file release-notes.md --latest
+          else
+            gh release create "$tag" "$installer" "$archive" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "$title" \
+              --notes-file release-notes.md \
+              --latest
+          fi

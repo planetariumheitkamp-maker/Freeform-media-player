@@ -1,3 +1,4 @@
+import { DEFAULT_PLAYER_VISUAL } from '../lib/appearance';
 import type { MediaSource, Player, Vec2 } from '../types';
 
 export const WORKSPACE_WIDTH = 1600;
@@ -36,6 +37,9 @@ export function createPlayer(index: number, sourceId = TEST_SOURCE.id): Player {
     position: { x: -220 + offset, y: 60 - offset * 0.45 },
     rotation: 0,
     scale: 1,
+    mediaRotation: 0,
+    mediaScale: 1,
+    visual: { ...DEFAULT_PLAYER_VISUAL },
     opacity: 1,
     volume: 0.8,
     muted: false,
@@ -48,6 +52,8 @@ export function createPlayer(index: number, sourceId = TEST_SOURCE.id): Player {
     nodes: [],
     border: [],
     autoplay: true,
+    domeWarp: false,
+    domePrewarped: false,
   };
 }
 

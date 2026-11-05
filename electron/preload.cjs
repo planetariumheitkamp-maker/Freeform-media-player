@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('freeform', {
   isDesktop: true,
   platform: process.platform,
   openLocalFiles: () => ipcRenderer.invoke('media:open'),
+  openBackgroundImage: () => ipcRenderer.invoke('media:open-background'),
   authorizeMedia: (paths) => ipcRenderer.invoke('media:authorize', paths),
   listDesktopSources: () => ipcRenderer.invoke('desktop:sources'),
   prepareDesktopCapture: (id, withAudio) => ipcRenderer.invoke('desktop:prepare', id, withAudio),

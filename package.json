@@ -8,7 +8,7 @@
   "author": "Heitkamp Planetarium",
   "license": "MIT",
   "scripts": {
-    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env ELECTRON_RENDERER_URL=http://127.0.0.1:5173 electron .\"",
+    "dev": "node scripts/dev.mjs",
     "dev:browser": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "start": "electron .",
@@ -16,6 +16,7 @@
     "dist": "npm run build && electron-builder --publish never",
     "test": "vitest run",
     "test:e2e": "npm run build && playwright test",
+    "test:desktop": "node scripts/verify-packaged.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
