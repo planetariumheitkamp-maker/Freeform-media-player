@@ -137,6 +137,30 @@ describe('shared live AI scheduler', () => {
     await expect(retry).resolves.toMatchObject({ backend: 'webgpu' });
   });
 
+  it('reports the active backend and last worker stage when inference times out', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('window', {
+      location: { href: 'http://localhost:4173/' },
+      setTimeout: globalThis.setTimeout,
+      clearTimeout: globalThis.clearTimeout,
+    });
+    try {
+      const pending = engine.process(image(), () => false);
+      const worker = MockWorker.instances[0];
+      worker.emit({ type: 'ready', backend: 'webgpu' });
+      await flush();
+      worker.emit({ type: 'status', detail: 'Running WEBGPU inference…' });
+      const rejection = expect(pending).rejects.toThrow(
+        'Backend: webgpu; last stage: Running WEBGPU inference…',
+      );
+      await vi.advanceTimersByTimeAsync(30_000);
+      await rejection;
+      expect(worker.terminated).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('resolves a cancelled request immediately without starting a worker', async () => {
     await expect(engine.process(image(), () => true)).resolves.toBeNull();
     expect(MockWorker.instances).toHaveLength(0);

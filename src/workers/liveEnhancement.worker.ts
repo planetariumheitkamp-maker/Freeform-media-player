@@ -30,6 +30,7 @@ async function sha256(buffer: ArrayBuffer): Promise<string> {
 }
 
 async function loadModel(request: Extract<LiveEnhancementWorkerRequest, { type: 'init' }>) {
+  post({ type: 'status', detail: 'Opening the verified AI model cache…' });
   let buffer: ArrayBuffer | null = null;
   let cache: Cache | null = null;
   try {
@@ -46,6 +47,7 @@ async function loadModel(request: Extract<LiveEnhancementWorkerRequest, { type: 
     if (!response.ok) throw new Error(`Model download failed (${response.status}).`);
     buffer = await response.arrayBuffer();
   }
+  post({ type: 'status', detail: 'Verifying the AI model size and SHA-256…' });
   if (buffer.byteLength !== request.modelBytes) throw new Error('The AI model has an unexpected file size.');
   if (await sha256(buffer) !== request.modelSha256) throw new Error('The AI model failed its integrity check.');
   if (cache) {
@@ -62,6 +64,8 @@ async function loadModel(request: Extract<LiveEnhancementWorkerRequest, { type: 
 
 async function createSession(kind: LiveEnhancementBackend) {
   if (!model) throw new Error('The AI model is not loaded.');
+  const label = kind.toUpperCase();
+  post({ type: 'status', detail: `Creating the ${label} inference session…` });
   const executionProviders = kind === 'webgpu'
     ? [{ name: 'webgpu', preferredLayout: 'NCHW' as const }]
     : ['wasm' as const];
@@ -71,6 +75,7 @@ async function createSession(kind: LiveEnhancementBackend) {
   });
   const feeds: Record<string, ort.Tensor> = {};
   feeds[nextSession.inputNames[0]] = new ort.Tensor('float32', new Float32Array(3 * 16 * 16), [1, 3, 16, 16]);
+  post({ type: 'status', detail: `Warming up the ${label} inference session…` });
   const warmup = await nextSession.run(feeds);
   Object.values(feeds).forEach((tensor) => tensor.dispose());
   Object.values(warmup).forEach((tensor) => tensor.dispose());
@@ -101,6 +106,7 @@ async function initialize(request: Extract<LiveEnhancementWorkerRequest, { type:
   let gpuAvailable = false;
   if (gpu) {
     try {
+      post({ type: 'status', detail: 'Requesting a WebGPU adapter…' });
       gpuAvailable = Boolean(await gpu.requestAdapter());
     } catch {
       gpuAvailable = false;
@@ -121,6 +127,7 @@ async function initialize(request: Extract<LiveEnhancementWorkerRequest, { type:
 
 async function runFrame(request: Extract<LiveEnhancementWorkerRequest, { type: 'frame' }>) {
   if (!session) throw new Error('The AI inference engine is not ready.');
+  post({ type: 'status', detail: `Running ${backend.toUpperCase()} inference…` });
   const startedAt = performance.now();
   const pixels = new Uint8ClampedArray(request.pixels);
   const { width, height } = request;

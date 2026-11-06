@@ -50,6 +50,11 @@ export class LiveEnhancementEngine {
   private nextJobId = 1;
   private modelTimer = 0;
   private frameTimer = 0;
+  private lastStage = 'Preparing live AI…';
+
+  private timeoutError(message: string): Error {
+    return new Error(`${message} Backend: ${this.backend ?? 'not ready'}; last stage: ${this.lastStage}`);
+  }
 
   subscribe(listener: StatusListener): () => void {
     this.listeners.add(listener);
@@ -59,6 +64,7 @@ export class LiveEnhancementEngine {
   }
 
   private broadcast(status: EngineStatus) {
+    this.lastStage = status.detail;
     this.listeners.forEach((listener) => listener(status));
   }
 
@@ -89,7 +95,7 @@ export class LiveEnhancementEngine {
       wasmPaths: runtimeAssetPaths(),
     };
     worker.postMessage(request);
-    this.modelTimer = window.setTimeout(() => this.fail(new Error('AI model loading timed out.')), MODEL_TIMEOUT_MS);
+    this.modelTimer = window.setTimeout(() => this.fail(this.timeoutError('AI model loading timed out.')), MODEL_TIMEOUT_MS);
     this.ready.catch(() => undefined);
     return this.ready;
   }
@@ -156,7 +162,7 @@ export class LiveEnhancementEngine {
       height: job.image.height,
     };
     this.worker.postMessage(request, [request.pixels]);
-    this.frameTimer = window.setTimeout(() => this.fail(new Error('AI frame processing timed out.')), FRAME_TIMEOUT_MS);
+    this.frameTimer = window.setTimeout(() => this.fail(this.timeoutError('AI frame processing timed out.')), FRAME_TIMEOUT_MS);
   }
 
   private fail(error: Error) {

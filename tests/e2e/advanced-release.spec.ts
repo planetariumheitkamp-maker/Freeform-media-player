@@ -169,6 +169,8 @@ test('multi-player alignment, distribution, marquee selection, resize, and histo
   const assertNoRuntimeErrors = monitorRuntimeErrors(page);
   await page.goto('/');
   await expect(page.locator('canvas.warp-canvas')).toBeVisible();
+  await page.getByLabel('Project name', { exact: true }).fill('Alignment test');
+  await expect.poll(async () => (await readProject(page)).players?.length).toBe(1);
   await page.locator('.player-actions button').first().click();
   await page.locator('.player-actions button').first().click();
   await expect(page.locator('.player-row')).toHaveCount(3);
