@@ -32,8 +32,8 @@ describe('live AI settings and frame safety', () => {
 
   it('uses a bounded WASM thread pool only when shared memory is available', () => {
     expect(liveEnhancementWasmThreads(12, false)).toBe(1);
-    expect(liveEnhancementWasmThreads(2, true)).toBe(1);
-    expect(liveEnhancementWasmThreads(4, true)).toBe(2);
+    expect(liveEnhancementWasmThreads(2, true)).toBe(2);
+    expect(liveEnhancementWasmThreads(4, true)).toBe(4);
     expect(liveEnhancementWasmThreads(12, true)).toBe(4);
     expect(liveEnhancementWasmThreads(Number.NaN, true)).toBe(1);
   });

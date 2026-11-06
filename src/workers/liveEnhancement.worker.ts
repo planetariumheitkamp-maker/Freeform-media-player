@@ -14,7 +14,7 @@ let session: ort.InferenceSession | null = null;
 let backend: LiveEnhancementBackend = 'wasm';
 let model: Uint8Array | null = null;
 let wasmPaths = '';
-let tileSize = 64;
+let tileSize = 192;
 let tilePad = 8;
 
 function post(message: LiveEnhancementWorkerResponse, transfer: Transferable[] = []) {
@@ -88,7 +88,7 @@ async function useBackend(kind: LiveEnhancementBackend) {
   if (session) await session.release();
   session = nextSession;
   backend = kind;
-  tileSize = kind === 'webgpu' ? 128 : 64;
+  tileSize = kind === 'webgpu' ? 128 : 192;
   tilePad = kind === 'webgpu' ? 12 : 8;
 }
 

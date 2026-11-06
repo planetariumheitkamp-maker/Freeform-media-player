@@ -19,7 +19,7 @@ export function liveEnhancementWasmThreads(
   const cores = Number.isFinite(hardwareConcurrency)
     ? Math.max(1, Math.floor(hardwareConcurrency))
     : 1;
-  return Math.min(4, Math.max(1, Math.ceil(cores / 2)));
+  return Math.min(4, cores);
 }
 
 export const DEFAULT_PLAYER_LIVE_ENHANCEMENT: PlayerLiveEnhancementSettings = {

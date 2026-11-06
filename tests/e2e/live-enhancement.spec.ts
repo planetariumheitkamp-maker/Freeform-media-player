@@ -51,72 +51,13 @@ async function installMockWorker(page: Page) {
   });
 }
 
-async function videoFixture(page: Page): Promise<Buffer> {
-  const encoded = await page.evaluate(() => new Promise<string>((resolve, reject) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 160;
-    canvas.height = 90;
-    const context = canvas.getContext('2d');
-    if (!context || !canvas.captureStream || typeof MediaRecorder === 'undefined') {
-      reject(new Error('MediaRecorder fixture generation is unavailable.'));
-      return;
-    }
-    const stream = canvas.captureStream(0);
-    const track = stream.getVideoTracks()[0] as MediaStreamTrack & { requestFrame?: () => void };
-    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
-      ? 'video/webm;codecs=vp8'
-      : 'video/webm';
-    const recorder = new MediaRecorder(stream, { mimeType });
-    const chunks: Blob[] = [];
-    let frame = 0;
-    let interval = 0;
-    const draw = () => {
-      context.fillStyle = '#172019';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      context.strokeStyle = '#c5ffc3';
-      context.lineWidth = 1;
-      for (let x = 0; x <= canvas.width; x += 10) {
-        context.beginPath(); context.moveTo(x, 0); context.lineTo(x, canvas.height); context.stroke();
-      }
-      for (let y = 0; y <= canvas.height; y += 10) {
-        context.beginPath(); context.moveTo(0, y); context.lineTo(canvas.width, y); context.stroke();
-      }
-      context.fillStyle = '#2cc9ff';
-      context.fillRect(10 + (frame * 5) % 110, 30, 30, 30);
-      frame += 1;
-      track.requestFrame?.();
-    };
-    recorder.ondataavailable = (event) => {
-      if (event.data.size) chunks.push(event.data);
-    };
-    recorder.onerror = () => {
-      window.clearInterval(interval);
-      stream.getTracks().forEach((streamTrack) => streamTrack.stop());
-      reject(new Error('MediaRecorder fixture generation failed.'));
-    };
-    recorder.onstop = () => {
-      window.clearInterval(interval);
-      stream.getTracks().forEach((streamTrack) => streamTrack.stop());
-      const blob = new Blob(chunks, { type: recorder.mimeType || mimeType });
-      if (!blob.size) {
-        reject(new Error('MediaRecorder produced an empty video fixture.'));
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result).split(',')[1]);
-      reader.onerror = () => reject(new Error('Generated fixture could not be read.'));
-      reader.readAsDataURL(blob);
-    };
-    draw();
-    recorder.start();
-    interval = window.setInterval(draw, 50);
-    window.setTimeout(() => recorder.stop(), 1800);
-  }));
-  return Buffer.from(encoded, 'base64');
+async function videoFixture(): Promise<Buffer> {
+  const { readFile } = await import('node:fs/promises');
+  return readFile(new URL('../fixtures/live-ai-fixture.webm', import.meta.url));
 }
 
 async function openVideo(page: Page) {
-  const buffer = await videoFixture(page);
+  const buffer = await videoFixture();
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Files', exact: true }).click();
   await (await chooser).setFiles({ name: 'live-ai-test.webm', mimeType: 'video/webm', buffer });
