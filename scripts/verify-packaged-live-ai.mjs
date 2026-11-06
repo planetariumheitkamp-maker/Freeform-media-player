@@ -42,6 +42,14 @@ try {
   page.on('requestfailed', (request) => failedRequests.push(`${request.url()} ${request.failure()?.errorText}`));
   await expect(page.locator('canvas.warp-canvas')).toBeVisible({ timeout: 30_000 });
   assert.equal(await page.evaluate(() => window.freeform?.isDesktop), true);
+  const acceleration = await page.evaluate(() => ({
+    webGpuAdvertised: Boolean(navigator.gpu),
+    hardwareConcurrency: navigator.hardwareConcurrency,
+    crossOriginIsolated: window.crossOriginIsolated,
+    sharedArrayBufferAvailable: typeof SharedArrayBuffer !== 'undefined',
+    userAgent: navigator.userAgent,
+  }));
+  console.log('Packaged AI runtime capabilities:', JSON.stringify(acceleration));
 
   server = createServer((request, response) => {
     const corsHeaders = {
@@ -177,13 +185,6 @@ try {
   const timingText = await page.locator('.live-enhancement-section .property-inline').textContent();
   const inferenceMs = Number(/([\d.]+)\s*ms/.exec(timingText || '')?.[1]);
   assert.ok(Number.isFinite(inferenceMs) && inferenceMs > 0, 'A real inference timing must be reported.');
-  const acceleration = await page.evaluate(() => ({
-    webGpuAdvertised: Boolean(navigator.gpu),
-    hardwareConcurrency: navigator.hardwareConcurrency,
-    crossOriginIsolated: window.crossOriginIsolated,
-    sharedArrayBufferAvailable: typeof SharedArrayBuffer !== 'undefined',
-    userAgent: navigator.userAgent,
-  }));
   await page.screenshot({ path: path.join(outputDirectory, 'packaged-model-active.png'), fullPage: true });
   const report = {
     result: 'passed',

@@ -29,7 +29,7 @@ type StatusListener = (status: EngineStatus) => void;
 
 const MAX_QUEUED_FRAMES = 4;
 const MODEL_TIMEOUT_MS = 120_000;
-const FRAME_TIMEOUT_MS = 30_000;
+const FRAME_TIMEOUT_MS = { webgpu: 30_000, wasm: 90_000 } as const;
 
 function runtimeAssetPaths(): string {
   return import.meta.env.DEV
@@ -162,7 +162,10 @@ export class LiveEnhancementEngine {
       height: job.image.height,
     };
     this.worker.postMessage(request, [request.pixels]);
-    this.frameTimer = window.setTimeout(() => this.fail(this.timeoutError('AI frame processing timed out.')), FRAME_TIMEOUT_MS);
+    this.frameTimer = window.setTimeout(
+      () => this.fail(this.timeoutError('AI frame processing timed out.')),
+      FRAME_TIMEOUT_MS[this.backend ?? 'wasm'],
+    );
   }
 
   private fail(error: Error) {

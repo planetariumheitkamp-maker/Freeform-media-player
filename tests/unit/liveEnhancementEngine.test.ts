@@ -161,6 +161,29 @@ describe('shared live AI scheduler', () => {
     }
   });
 
+  it('allows a longer bounded CPU attempt without changing the WebGPU deadline', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('window', {
+      location: { href: 'http://localhost:4173/' },
+      setTimeout: globalThis.setTimeout,
+      clearTimeout: globalThis.clearTimeout,
+    });
+    try {
+      const pending = engine.process(image(), () => false);
+      const worker = MockWorker.instances[0];
+      worker.emit({ type: 'ready', backend: 'wasm' });
+      await flush();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(worker.terminated).toBe(false);
+      const rejection = expect(pending).rejects.toThrow('Backend: wasm');
+      await vi.advanceTimersByTimeAsync(60_000);
+      await rejection;
+      expect(worker.terminated).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('resolves a cancelled request immediately without starting a worker', async () => {
     await expect(engine.process(image(), () => true)).resolves.toBeNull();
     expect(MockWorker.instances).toHaveLength(0);

@@ -147,9 +147,10 @@ async function runFrame(request: Extract<LiveEnhancementWorkerRequest, { type: '
     for (let tileX = 0; tileX < tilesX; tileX += 1) {
       const tileNumber = tileY * tilesX + tileX + 1;
       const threadDetail = backend === 'wasm' ? `, ${ort.env.wasm.numThreads} threads` : '';
+      const elapsedMs = Math.round(performance.now() - startedAt);
       post({
         type: 'status',
-        detail: `Running ${backend.toUpperCase()} tile ${tileNumber}/${tilesX * tilesY}${threadDetail}…`,
+        detail: `Running ${backend.toUpperCase()} tile ${tileNumber}/${tilesX * tilesY}${threadDetail}, ${elapsedMs} ms elapsed…`,
       });
       const sourceX = tileX * tileSize;
       const sourceY = tileY * tileSize;
