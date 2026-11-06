@@ -11,6 +11,17 @@ export const LIVE_ENHANCEMENT_MODEL_CACHE = 'freeform-live-ai-models-v1';
 export const LIVE_ENHANCEMENT_MAX_LATENCY_MS = 350;
 export const LIVE_ENHANCEMENT_INPUT_SIZES: LiveEnhancementInputSize[] = [320, 480, 640];
 
+export function liveEnhancementWasmThreads(
+  hardwareConcurrency: number,
+  sharedArrayBufferAvailable: boolean,
+): number {
+  if (!sharedArrayBufferAvailable) return 1;
+  const cores = Number.isFinite(hardwareConcurrency)
+    ? Math.max(1, Math.floor(hardwareConcurrency))
+    : 1;
+  return Math.min(4, Math.max(1, Math.ceil(cores / 2)));
+}
+
 export const DEFAULT_PLAYER_LIVE_ENHANCEMENT: PlayerLiveEnhancementSettings = {
   enabled: false,
   strength: 0.8,

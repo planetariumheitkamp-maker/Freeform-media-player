@@ -18,6 +18,11 @@ const allowedMediaPaths = new Set();
 let mainWindow;
 let pendingDesktopRequest = null;
 
+// The desktop app hosts trusted local UI code. Allow its sandboxed AI worker to
+// use a bounded WASM thread pool without requiring cross-origin isolation for
+// user-supplied remote media, which may not provide Cross-Origin-Resource-Policy.
+app.commandLine.appendSwitch('enable-features', 'SharedArrayBuffer');
+
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'freeform-media',

@@ -179,6 +179,8 @@ try {
   const acceleration = await page.evaluate(() => ({
     webGpuAdvertised: Boolean(navigator.gpu),
     hardwareConcurrency: navigator.hardwareConcurrency,
+    crossOriginIsolated: window.crossOriginIsolated,
+    sharedArrayBufferAvailable: typeof SharedArrayBuffer !== 'undefined',
     userAgent: navigator.userAgent,
   }));
   await page.screenshot({ path: path.join(outputDirectory, 'packaged-model-active.png'), fullPage: true });

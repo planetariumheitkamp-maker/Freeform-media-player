@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
 import * as ort from 'onnxruntime-web/webgpu';
+import { liveEnhancementWasmThreads } from '../lib/liveEnhancement';
 import type {
   LiveEnhancementBackend,
   LiveEnhancementWorkerRequest,
@@ -94,7 +95,10 @@ async function useBackend(kind: LiveEnhancementBackend) {
 async function initialize(request: Extract<LiveEnhancementWorkerRequest, { type: 'init' }>) {
   wasmPaths = request.wasmPaths;
   ort.env.wasm.wasmPaths = wasmPaths;
-  ort.env.wasm.numThreads = 1;
+  ort.env.wasm.numThreads = liveEnhancementWasmThreads(
+    navigator.hardwareConcurrency,
+    typeof SharedArrayBuffer !== 'undefined',
+  );
   ort.env.wasm.proxy = false;
   ort.env.logLevel = 'warning';
   model = await loadModel(request);
@@ -141,6 +145,12 @@ async function runFrame(request: Extract<LiveEnhancementWorkerRequest, { type: '
 
   for (let tileY = 0; tileY < tilesY; tileY += 1) {
     for (let tileX = 0; tileX < tilesX; tileX += 1) {
+      const tileNumber = tileY * tilesX + tileX + 1;
+      const threadDetail = backend === 'wasm' ? `, ${ort.env.wasm.numThreads} threads` : '';
+      post({
+        type: 'status',
+        detail: `Running ${backend.toUpperCase()} tile ${tileNumber}/${tilesX * tilesY}${threadDetail}…`,
+      });
       const sourceX = tileX * tileSize;
       const sourceY = tileY * tileSize;
       const x0 = Math.max(0, sourceX - tilePad);

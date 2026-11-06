@@ -6,6 +6,7 @@ import {
   isPlayerLiveEnhancement,
   liveEnhancementFrameIsFresh,
   liveEnhancementRetryDelay,
+  liveEnhancementWasmThreads,
   normalizePlayerLiveEnhancement,
 } from '../../src/lib/liveEnhancement';
 import { parseProject, serializeProject } from '../../src/lib/project';
@@ -27,6 +28,14 @@ describe('live AI settings and frame safety', () => {
     expect(isPlayerLiveEnhancement({ enabled: true, strength: 0.6, inputSize: 480 })).toBe(true);
     expect(isPlayerLiveEnhancement({ strength: 'high' })).toBe(false);
     expect(isPlayerLiveEnhancement(null)).toBe(false);
+  });
+
+  it('uses a bounded WASM thread pool only when shared memory is available', () => {
+    expect(liveEnhancementWasmThreads(12, false)).toBe(1);
+    expect(liveEnhancementWasmThreads(2, true)).toBe(1);
+    expect(liveEnhancementWasmThreads(4, true)).toBe(2);
+    expect(liveEnhancementWasmThreads(12, true)).toBe(4);
+    expect(liveEnhancementWasmThreads(Number.NaN, true)).toBe(1);
   });
 
   it('caps the long edge, retains aspect ratio, and never enlarges a small source', () => {
