@@ -6,6 +6,7 @@ import { isRenderQuality, normalizeRenderQuality } from './quality';
 import { DEFAULT_PLANETARIUM_SETTINGS, normalizePlanetariumSettings } from './dome';
 import { normalizeGroups } from './groups';
 import { DEFAULT_TRACE_SETTINGS, normalizeTraceSettings } from './traceSettings';
+import { isPlayerLiveEnhancement, normalizePlayerLiveEnhancement } from './liveEnhancement';
 import type { LinkGroup, MediaSource, Player, ProjectFile, RenderQuality, WorkspaceBackground, WorkspaceGridGeometryInput, WorkspaceOutputSize, WorkspacePlanetariumSettingsInput, WorkspaceTraceSettingsInput } from '../types';
 
 interface ProjectState {
@@ -119,6 +120,7 @@ function isPlayer(value: unknown): value is Player {
   if (value.mediaRotation !== undefined && !isFiniteNumber(value.mediaRotation)) return false;
   if (value.mediaScale !== undefined && !isFiniteNumber(value.mediaScale)) return false;
   if (value.visual !== undefined && !isPlayerVisual(value.visual)) return false;
+  if (value.enhancement !== undefined && !isPlayerLiveEnhancement(value.enhancement)) return false;
   const booleanFields = ['muted', 'loop', 'visible', 'locked', 'autoplay'];
   if (!booleanFields.every((field) => typeof value[field] === 'boolean')) return false;
   if (value.domeWarp !== undefined && typeof value.domeWarp !== 'boolean') return false;
@@ -194,6 +196,7 @@ export function parseProject(content: string): ProjectFile {
     mediaRotation: isFiniteNumber(player.mediaRotation) ? player.mediaRotation : 0,
     mediaScale: Math.max(0.1, Math.min(10, isFiniteNumber(player.mediaScale) ? player.mediaScale : 1)),
     visual: normalizePlayerVisual(isPlayerVisual(player.visual) ? player.visual : undefined),
+    enhancement: normalizePlayerLiveEnhancement(isPlayerLiveEnhancement(player.enhancement) ? player.enhancement : undefined),
     opacity: Math.max(0, Math.min(1, player.opacity)),
     volume: Math.max(0, Math.min(1, player.volume)),
     rate: Math.max(0.1, Math.min(4, player.rate)),

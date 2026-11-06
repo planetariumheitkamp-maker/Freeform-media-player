@@ -201,7 +201,7 @@ async function createWindow() {
     height: 950,
     minWidth: 1080,
     minHeight: 700,
-    title: 'Freeform',
+    title: 'Freeform Live AI — Prototype',
     backgroundColor: '#1f1f1f',
     autoHideMenuBar: true,
     webPreferences: {

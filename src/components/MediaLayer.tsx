@@ -2,9 +2,11 @@ import Hls from 'hls.js';
 import hlsWorkerUrl from 'hls.js/dist/hls.worker.js?url';
 import { useCallback, useEffect, useRef, type RefObject } from 'react';
 import { formatTime } from '../lib/format';
+import { normalizePlayerLiveEnhancement } from '../lib/liveEnhancement';
 import { useWorkspace } from '../store/useWorkspace';
 import type { MediaSource, Player, TestPatternKind } from '../types';
 import { useMedia, type TextureSource } from './MediaContext';
+import { useLiveEnhancement } from './useLiveEnhancement';
 
 const CANVAS_WIDTH = 640;
 const CANVAS_HEIGHT = 360;
@@ -290,12 +292,25 @@ function StatusCanvas({ player, source }: { player: Player; source: MediaSource 
 function DirectMedia({ player, source, audioOnly = false }: { player: Player; source: MediaSource; audioOnly?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const enhancedCanvasRef = useRef<HTMLCanvasElement>(null);
   const mediaRef = audioOnly ? audioRef : videoRef;
   const updateSource = useWorkspace((state) => state.updateSource);
+  const enhancement = normalizePlayerLiveEnhancement(player.enhancement);
+  const enhancementEnabled = !audioOnly && source.mediaType === 'video' && enhancement.enabled;
+  const displayEnhanced = useLiveEnhancement({
+    playerId: player.id,
+    sourceKey: `${source.id}:${source.uri ?? ''}`,
+    enabled: enhancementEnabled,
+    strength: enhancement.strength,
+    inputSize: enhancement.inputSize,
+    videoRef,
+    canvasRef: enhancedCanvasRef,
+  });
   useMediaSource(mediaRef, source, player);
   useMediaProperties(mediaRef, player, false);
   useControlRegistration(player.id, mediaRef);
-  const refresh = useTextureRegistration(player.id, videoRef);
+  const textureRef = displayEnhanced ? enhancedCanvasRef : videoRef;
+  const refresh = useTextureRegistration(player.id, textureRef);
 
   if (!source.uri) return <StatusCanvas player={player} source={{ ...source, connected: false, detail: 'No media URL is stored for this source.' }} />;
 
@@ -313,9 +328,19 @@ function DirectMedia({ player, source, audioOnly = false }: { player: Player; so
     onError: handleError,
   };
 
-  return audioOnly
-    ? <audio ref={audioRef} {...shared} />
-    : <video ref={videoRef} {...shared} playsInline />;
+  if (audioOnly) return <audio ref={audioRef} {...shared} />;
+  return (
+    <>
+      <video ref={videoRef} {...shared} playsInline />
+      {enhancementEnabled && (
+        <canvas
+          ref={enhancedCanvasRef}
+          data-live-enhancement-for={player.id}
+          data-display-active={displayEnhanced ? 'true' : 'false'}
+        />
+      )}
+    </>
+  );
 }
 
 function LiveMedia({ player, source, stream }: { player: Player; source: MediaSource; stream: MediaStream }) {

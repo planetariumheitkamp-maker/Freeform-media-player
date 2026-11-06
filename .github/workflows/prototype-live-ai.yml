@@ -1,0 +1,141 @@
+name: Freeform Live AI prototype
+
+on:
+  push:
+    branches:
+      - prototype/live-ai-enhancement
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Unit and browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run unit tests
+        run: npm test
+      - name: Run browser tests
+        run: npm run test:e2e
+
+  package:
+    name: Build and verify Windows prototype
+    needs: test
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build installer and portable ZIP
+        run: npm run dist
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Verify packaged desktop app
+        run: npm run test:desktop -- "release/win-unpacked/Freeform Live AI.exe"
+      - name: Verify real packaged AI inference
+        run: npm run test:desktop-ai -- "release/win-unpacked/Freeform Live AI.exe"
+      - name: Upload Windows packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: freeform-live-ai-Windows
+          path: |
+            release/*.exe
+            release/*.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish separate live AI prerelease
+    if: github.ref == 'refs/heads/prototype/live-ai-enhancement'
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Download Windows packages
+        uses: actions/download-artifact@v4
+        with:
+          name: freeform-live-ai-Windows
+          path: release
+      - name: Publish fixed prototype prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          installers=(release/Freeform-Live-AI-*-win-x64.exe)
+          if [[ ${#installers[@]} -ne 1 ]]; then
+            echo "Expected exactly one Windows prototype installer, found ${#installers[@]}."
+            exit 1
+          fi
+          installer="${installers[0]}"
+          archive="${installer%.exe}.zip"
+          test -f "$archive"
+          version="${installer##*Freeform-Live-AI-}"
+          version="${version%-win-x64.exe}"
+          installer_checksum="$(sha256sum "$installer")"
+          installer_checksum="${installer_checksum%% *}"
+          archive_checksum="$(sha256sum "$archive")"
+          archive_checksum="${archive_checksum%% *}"
+          cat > release-notes.md <<EOF
+          ## Experimental live sharpness prototype
+
+          **Freeform Live AI ${version}** is a separate application. It installs alongside the stable Freeform release and does not replace it.
+
+          ### Download for 64-bit Windows
+
+          - Installer: \`${installer##*/}\`
+          - Portable ZIP: \`${archive##*/}\` — extract it and run \`Freeform Live AI.exe\`.
+
+          ### Prototype behavior
+
+          - Real-ESRGAN ONNX inference with 4× output, per-player strength and input-size controls.
+          - WebGPU is attempted first, with a WASM fallback.
+          - Enhancement is off by default. Late or failed AI frames leave the original video visible; paused frames can finish slowly.
+          - First use needs internet access to download a 4.9 MB model. Its byte count and SHA-256 are verified before use, and it is cached for later sessions. ONNX Runtime assets are bundled locally.
+          - Automated checks include unit, browser, packaged-desktop, and real packaged-inference tests. WASM processing can take seconds per frame; real-time playback and WebGPU performance are not guaranteed.
+          - This is an experimental evaluation build. Review \`THIRD_PARTY_NOTICES.md\`; the third-party model host does not provide a model card or independently verified weight-license statement.
+
+          The installer is unsigned, so Windows SmartScreen may request confirmation.
+
+          Installer SHA-256: \`${installer_checksum}\`
+          Portable ZIP SHA-256: \`${archive_checksum}\`
+          Built from commit \`${GITHUB_SHA}\`.
+          EOF
+          tag="live-ai-prototype"
+          title="Freeform Live AI ${version} — Experimental"
+          git push origin "${GITHUB_SHA}:refs/tags/${tag}" --force
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" "$installer" "$archive" --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --title "$title" --notes-file release-notes.md --prerelease
+          else
+            gh release create "$tag" "$installer" "$archive" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "$title" \
+              --notes-file release-notes.md \
+              --prerelease
+          fi

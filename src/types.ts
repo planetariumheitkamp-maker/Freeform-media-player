@@ -47,6 +47,23 @@ export interface PlayerVisualSettings {
 
 export type PlayerVisualSettingsInput = Partial<PlayerVisualSettings>;
 
+export type LiveEnhancementInputSize = 320 | 480 | 640;
+
+export interface PlayerLiveEnhancementSettings {
+  enabled: boolean;
+  strength: number;
+  inputSize: LiveEnhancementInputSize;
+}
+
+export type PlayerLiveEnhancementInput = Partial<PlayerLiveEnhancementSettings>;
+
+export interface LiveEnhancementRuntimeStatus {
+  phase: 'off' | 'loading' | 'active' | 'fallback' | 'error';
+  detail: string;
+  backend?: 'webgpu' | 'wasm';
+  inferenceMs?: number;
+}
+
 export interface Player {
   id: string;
   name: string;
@@ -58,6 +75,7 @@ export interface Player {
   mediaRotation: number;
   mediaScale: number;
   visual?: PlayerVisualSettingsInput;
+  enhancement?: PlayerLiveEnhancementInput;
   opacity: number;
   volume: number;
   muted: boolean;

@@ -1,6 +1,6 @@
 {
   "name": "freeform-media-player",
-  "version": "0.1.0",
+  "version": "0.2.0-live-ai.0",
   "description": "Cross-platform free-form media compositor with live GPU mesh warping and selectable link groups.",
   "main": "electron/main.js",
   "type": "module",
@@ -8,8 +8,11 @@
   "author": "Heitkamp Planetarium",
   "license": "MIT",
   "scripts": {
+    "predev": "node scripts/prepare-ai-runtime.mjs",
+    "predev:browser": "node scripts/prepare-ai-runtime.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:browser": "vite --host 127.0.0.1",
+    "prebuild": "node scripts/prepare-ai-runtime.mjs",
     "build": "tsc --noEmit && vite build",
     "start": "electron .",
     "pack": "npm run build && electron-builder --dir --publish never",
@@ -17,6 +20,7 @@
     "test": "vitest run",
     "test:e2e": "npm run build && playwright test",
     "test:desktop": "node scripts/verify-packaged.mjs",
+    "test:desktop-ai": "node scripts/verify-packaged-live-ai.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
@@ -25,6 +29,7 @@
     "cdt2d": "^1.0.0",
     "hls.js": "^1.7.3",
     "lucide-react": "^1.61.0",
+    "onnxruntime-web": "1.21.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "three": "^0.186.1",
@@ -47,8 +52,8 @@
     "wait-on": "^9.5.1"
   },
   "build": {
-    "appId": "org.freeform.mediaplayer",
-    "productName": "Freeform",
+    "appId": "org.freeform.mediaplayer.liveai",
+    "productName": "Freeform Live AI",
     "directories": {
       "output": "release"
     },
@@ -60,9 +65,12 @@
       "THIRD_PARTY_NOTICES.md"
     ],
     "asar": true,
-    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "artifactName": "Freeform-Live-AI-${version}-${os}-${arch}.${ext}",
     "win": {
-      "target": ["nsis", "zip"]
+      "target": [
+        "nsis",
+        "zip"
+      ]
     },
     "nsis": {
       "oneClick": false,
@@ -70,7 +78,10 @@
     },
     "mac": {
       "category": "public.app-category.video",
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "extendInfo": {
         "NSCameraUsageDescription": "Freeform uses cameras and capture devices as live media sources.",
         "NSMicrophoneUsageDescription": "Freeform uses microphones and capture-device audio as media sources.",
@@ -80,7 +91,10 @@
     },
     "linux": {
       "category": "AudioVideo",
-      "target": ["AppImage", "zip"]
+      "target": [
+        "AppImage",
+        "zip"
+      ]
     }
   }
 }

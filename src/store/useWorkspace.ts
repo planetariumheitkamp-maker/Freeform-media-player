@@ -16,6 +16,7 @@ import {
   squareToQuad,
 } from '../lib/geometry';
 import { DEFAULT_BACKGROUND_COLOR, normalizeBackgroundColor, normalizePlayerVisual } from '../lib/appearance';
+import { normalizePlayerLiveEnhancement } from '../lib/liveEnhancement';
 import { DEFAULT_PLANETARIUM_SETTINGS, normalizePlanetariumSettings } from '../lib/dome';
 import { DEFAULT_GRID_GEOMETRY, normalizeGridGeometry } from '../lib/grid';
 import { DEFAULT_OUTPUT_SIZE, normalizeOutputOpacity, normalizeOutputSize } from '../lib/output';
@@ -35,6 +36,7 @@ import type {
   EditorMode,
   EditorTool,
   LinkGroup,
+  LiveEnhancementRuntimeStatus,
   MediaSource,
   MeshNode,
   Player,
@@ -69,6 +71,7 @@ interface WorkspaceState {
   tool: EditorTool;
   showMesh: boolean;
   presentation: boolean;
+  liveEnhancementStatus: Record<string, LiveEnhancementRuntimeStatus>;
   toasts: ToastMessage[];
   historyPast: string[];
   historyFuture: string[];
@@ -118,6 +121,7 @@ interface WorkspaceState {
   setTool: (tool: EditorTool) => void;
   setShowMesh: (value: boolean) => void;
   setPresentation: (value: boolean) => void;
+  setLiveEnhancementStatus: (playerId: string, status: LiveEnhancementRuntimeStatus) => void;
   canUndo: boolean;
   canRedo: boolean;
   beginHistory: (label?: string) => void;
@@ -288,6 +292,7 @@ export const useWorkspace = create<WorkspaceState>()((rawSet, get) => {
     tool: 'select',
     showMesh: true,
     presentation: false,
+    liveEnhancementStatus: {},
     canUndo: false,
     canRedo: false,
     historyPast: [],
@@ -476,6 +481,7 @@ export const useWorkspace = create<WorkspaceState>()((rawSet, get) => {
           ...player,
           ...patch,
           visual: normalizePlayerVisual({ ...player.visual, ...patch.visual }),
+          enhancement: normalizePlayerLiveEnhancement({ ...player.enhancement, ...patch.enhancement }),
         } : player),
       });
       if (playbackOnly) rawSet(update);
@@ -490,6 +496,7 @@ export const useWorkspace = create<WorkspaceState>()((rawSet, get) => {
           ...player,
           ...patch,
           visual: normalizePlayerVisual({ ...player.visual, ...patch.visual }),
+          enhancement: normalizePlayerLiveEnhancement({ ...player.enhancement, ...patch.enhancement }),
         } : player),
       });
       if (playbackOnly) rawSet(update);
@@ -750,6 +757,16 @@ export const useWorkspace = create<WorkspaceState>()((rawSet, get) => {
     setTool: (tool) => set({ tool }),
     setShowMesh: (showMesh) => set({ showMesh }),
     setPresentation: (presentation) => set({ presentation }),
+    setLiveEnhancementStatus: (playerId, status) => {
+      const current = get().liveEnhancementStatus[playerId];
+      if (current?.phase === status.phase
+        && current.detail === status.detail
+        && current.backend === status.backend
+        && current.inferenceMs === status.inferenceMs) return;
+      rawSet((state) => ({
+        liveEnhancementStatus: { ...state.liveEnhancementStatus, [playerId]: status },
+      }));
+    },
     beginHistory: (label = 'Edit workspace') => {
       if (!activeHistory) activeHistory = { before: captureHistory(get()), label, changed: false };
     },
@@ -786,6 +803,7 @@ export const useWorkspace = create<WorkspaceState>()((rawSet, get) => {
       const players = project.players.map((player) => ({
         ...player,
         visual: normalizePlayerVisual(player.visual),
+        enhancement: normalizePlayerLiveEnhancement(player.enhancement),
         autoplay: false,
       }));
       const normalized = normalizeGroups(players, project.groups);

@@ -114,7 +114,7 @@ export function TopBar({ onMinimizeAll }: { onMinimizeAll: () => void }) {
       <header className="top-bar">
         <div className="brand">
           <svg viewBox="0 0 34 34" aria-hidden="true"><path d="M3 7 28 3 31 27 7 31Z" /><path d="m3 7 14 10L28 3M17 17l14 10M17 17 7 31" /></svg>
-          <div><strong>FREEFORM</strong><span>MEDIA COMPOSITOR</span></div>
+          <div><strong>FREEFORM</strong><span>LIVE AI · EXPERIMENTAL</span></div>
         </div>
         <div className="project-title">
           <span className="save-indicator" />

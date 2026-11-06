@@ -174,6 +174,21 @@ input[type='range']::-moz-range-thumb { width: 9px; height: 9px; border: 1px sol
 .toggle-row button.active { color: var(--mint); border-color: #526052; background: rgba(197, 255, 195, .04); }
 .select-field { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; color: #9da39e; font-size: 9px; }
 .select-field select { width: 82px; height: 28px; padding: 0 5px; border: 1px solid var(--line); background: #1f211f; font-family: 'Fira Mono', monospace; font-size: 9px; }
+.live-enhancement-section { background: rgba(44, 201, 255, .018); }
+.live-enhancement-section .inspector-heading { display: flex; align-items: center; gap: 6px; color: #8fb9c3; letter-spacing: .85px; }
+.live-enhancement-toggle { margin-bottom: 8px; }
+.live-enhancement-section .select-field select { width: 150px; }
+.live-enhancement-status { display: flex; align-items: flex-start; gap: 8px; margin-top: 11px; padding: 8px; border-left: 2px solid #52615d; background: rgba(255, 255, 255, .02); }
+.live-enhancement-status strong { flex: 0 0 auto; color: #a4aaa5; font: 7px 'Fira Mono', monospace; letter-spacing: .4px; }
+.live-enhancement-status span { color: #9da39e; font-size: 8.5px; line-height: 1.5; }
+.live-enhancement-status.active { border-color: var(--mint); }
+.live-enhancement-status.active strong { color: var(--mint); }
+.live-enhancement-status.loading { border-color: var(--cyan); }
+.live-enhancement-status.loading strong { color: var(--cyan); }
+.live-enhancement-status.fallback { border-color: #d1b875; }
+.live-enhancement-status.error { border-color: #e78282; }
+.live-enhancement-status.fallback strong, .live-enhancement-status.error strong { color: #d1b875; }
+.live-enhancement-section input:disabled, .live-enhancement-section select:disabled { opacity: .45; }
 .inspector-footer-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; border-bottom: 0; }
 .inspector-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px; color: var(--dim); text-align: center; }
 .inspector-empty strong { margin-top: 12px; color: var(--muted); font-size: 13px; }
