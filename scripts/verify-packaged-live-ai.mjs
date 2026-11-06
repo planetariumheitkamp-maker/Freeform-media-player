@@ -28,6 +28,7 @@ try {
     args: [
       `--user-data-dir=${profileDirectory}`,
       '--use-angle=swiftshader',
+      '--enable-unsafe-swiftshader',
       '--enable-webgl',
       '--autoplay-policy=no-user-gesture-required',
     ],

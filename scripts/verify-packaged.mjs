@@ -24,6 +24,7 @@ try {
     args: [
       `--user-data-dir=${profileDirectory}`,
       '--use-angle=swiftshader',
+      '--enable-unsafe-swiftshader',
       '--enable-webgl',
       '--autoplay-policy=no-user-gesture-required',
     ],
@@ -181,6 +182,17 @@ try {
     runtimeErrors,
   }, null, 2));
   console.log(JSON.stringify({ appInfo, checks, runtimeErrors }, null, 2));
+} catch (error) {
+  if (electronApp) {
+    for (const [index, window] of electronApp.windows().entries()) {
+      try {
+        await window.screenshot({ path: path.join(outputDirectory, `desktop-failure-${index}.png`), timeout: 5000 });
+      } catch {
+        // Preserve the original failure if the renderer is also unresponsive.
+      }
+    }
+  }
+  throw new Error(`Packaged desktop verification failed. Runtime errors: ${runtimeErrors.join(' | ') || 'none'}`, { cause: error });
 } finally {
   if (electronApp) await electronApp.close();
   await rm(profileDirectory, { recursive: true, force: true });

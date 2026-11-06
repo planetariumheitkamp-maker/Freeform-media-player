@@ -50,10 +50,10 @@ jobs:
         run: npm run dist
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      - name: Verify packaged desktop app
-        run: npm run test:desktop -- "release/win-unpacked/Freeform Live AI.exe"
       - name: Verify real packaged AI inference
         run: npm run test:desktop-ai -- "release/win-unpacked/Freeform Live AI.exe"
+      - name: Verify packaged desktop app
+        run: npm run test:desktop -- "release/win-unpacked/Freeform Live AI.exe"
       - name: Upload Windows packages
         uses: actions/upload-artifact@v4
         with:
@@ -62,6 +62,16 @@ jobs:
             release/*.exe
             release/*.zip
           if-no-files-found: error
+      - name: Upload failed verification evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: freeform-live-ai-verification-failure
+          path: |
+            test-results/**/*.png
+            verification/live-ai-packaged/*.png
+            verification/live-ai-packaged/*.json
+          if-no-files-found: ignore
 
   release:
     name: Publish separate live AI prerelease
