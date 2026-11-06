@@ -156,11 +156,25 @@ try {
   await page.getByRole('button', { name: 'Add stream', exact: true }).click();
   const video = page.locator('.media-layer video');
   await expect(video).toBeVisible();
-  await expect.poll(() => video.evaluate((element) => element.readyState)).toBeGreaterThanOrEqual(2);
+  try {
+    await expect.poll(() => video.evaluate((element) => element.readyState), { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
+  } catch (error) {
+    const mediaState = await video.evaluate((element) => ({
+      readyState: element.readyState,
+      networkState: element.networkState,
+      currentSrc: element.currentSrc,
+      error: element.error?.message ?? null,
+    }));
+    const sources = await page.locator('.source-list').textContent();
+    await page.screenshot({ path: path.join(outputDirectory, 'packaged-video-error.png'), fullPage: true });
+    throw new Error(`Packaged video did not decode: ${JSON.stringify({
+      mediaState, sources, consoleMessages, failedRequests,
+    })}`, { cause: error });
+  }
   if (await video.evaluate((element) => !element.paused)) {
     await page.getByRole('button', { name: 'Play / pause (Space)', exact: true }).click();
   }
-  await expect.poll(() => video.evaluate((element) => element.paused)).toBe(true);
+  await expect.poll(() => video.evaluate((element) => element.paused), { timeout: 30_000 }).toBe(true);
   await video.evaluate((element) => new Promise((resolve) => {
     element.currentTime = Math.min(0.8, element.duration || 0.8);
     if (element.seeking) element.addEventListener('seeked', () => resolve(), { once: true });
