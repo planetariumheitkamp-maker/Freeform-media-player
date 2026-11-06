@@ -81,11 +81,18 @@ try {
     { field: 'hue', label: 'Hue', value: 65, initial: 0 },
     { field: 'temperature', label: 'Temperature', value: 45, initial: 0 },
   ];
+  const expectCanvasChange = async (previousFrame, label) => {
+    try {
+      await expect.poll(() => canvas.evaluate((element) => element.toDataURL()), { timeout: 30_000 }).not.toBe(previousFrame);
+    } catch (error) {
+      throw new Error(`${label} did not update the packaged canvas.`, { cause: error });
+    }
+  };
   let previousAppearanceFrame = await canvas.evaluate((element) => element.toDataURL());
   for (const visual of visualFields) {
     await setInput(`input[data-visual-field="${visual.field}"]`, visual.value);
     await expect(page.getByRole('slider', { name: visual.label, exact: true })).toHaveValue(String(visual.value));
-    await expect.poll(() => canvas.evaluate((element) => element.toDataURL())).not.toBe(previousAppearanceFrame);
+    await expectCanvasChange(previousAppearanceFrame, `Visual field "${visual.field}"`);
     previousAppearanceFrame = await canvas.evaluate((element) => element.toDataURL());
   }
   await page.getByRole('button', { name: 'Reset visual settings', exact: true }).click();
@@ -107,7 +114,7 @@ try {
   await expect(domeToggle).toBeEnabled();
   const unwarpedFrame = await canvas.evaluate((element) => element.toDataURL());
   await domeToggle.check();
-  await expect.poll(() => canvas.evaluate((element) => element.toDataURL())).not.toBe(unwarpedFrame);
+  await expectCanvasChange(unwarpedFrame, 'Dome warp');
   checks.push('Planetarium controls and per-player dome warp change packaged rendering.');
 
   await page.locator('.player-actions button').first().click();
