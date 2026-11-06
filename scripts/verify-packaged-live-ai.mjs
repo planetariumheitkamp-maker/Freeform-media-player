@@ -1,7 +1,7 @@
 import { expect, _electron as electron } from '@playwright/test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const root = process.cwd();
@@ -16,7 +16,8 @@ await mkdir(outputDirectory, { recursive: true });
 
 let electronApp;
 let server;
-let fixture = Buffer.alloc(0);
+const fixture = await readFile(path.join(root, 'tests', 'fixtures', 'live-ai-fixture.webm'));
+assert.ok(fixture.byteLength > 0);
 const consoleMessages = [];
 const failedRequests = [];
 
@@ -40,72 +41,6 @@ try {
   page.on('requestfailed', (request) => failedRequests.push(`${request.url()} ${request.failure()?.errorText}`));
   await expect(page.locator('canvas.warp-canvas')).toBeVisible({ timeout: 30_000 });
   assert.equal(await page.evaluate(() => window.freeform?.isDesktop), true);
-
-  const encoded = await page.evaluate(() => new Promise((resolve, reject) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 160;
-    canvas.height = 90;
-    const context = canvas.getContext('2d');
-    if (!context || !canvas.captureStream || typeof MediaRecorder === 'undefined') {
-      reject(new Error('MediaRecorder fixture generation is unavailable.'));
-      return;
-    }
-    const stream = canvas.captureStream(0);
-    const track = stream.getVideoTracks()[0];
-    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
-      ? 'video/webm;codecs=vp8'
-      : 'video/webm';
-    const recorder = new MediaRecorder(stream, { mimeType });
-    const chunks = [];
-    let frame = 0;
-    let interval = 0;
-    const draw = () => {
-      context.fillStyle = '#172019';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      context.strokeStyle = '#c5ffc3';
-      context.lineWidth = 1;
-      for (let x = 0; x <= canvas.width; x += 8) {
-        context.beginPath(); context.moveTo(x, 0); context.lineTo(x, canvas.height); context.stroke();
-      }
-      for (let y = 0; y <= canvas.height; y += 9) {
-        context.beginPath(); context.moveTo(0, y); context.lineTo(canvas.width, y); context.stroke();
-      }
-      context.fillStyle = '#2cc9ff';
-      context.fillRect(18 + (frame * 3) % 90, 27, 36, 36);
-      context.fillStyle = '#ebebeb';
-      context.font = '12px sans-serif';
-      context.fillText('PACKAGED AI', 87, 78);
-      frame += 1;
-      track.requestFrame?.();
-    };
-    recorder.ondataavailable = (event) => {
-      if (event.data.size) chunks.push(event.data);
-    };
-    recorder.onerror = () => {
-      window.clearInterval(interval);
-      stream.getTracks().forEach((streamTrack) => streamTrack.stop());
-      reject(new Error('MediaRecorder fixture generation failed.'));
-    };
-    recorder.onstop = () => {
-      window.clearInterval(interval);
-      stream.getTracks().forEach((streamTrack) => streamTrack.stop());
-      const blob = new Blob(chunks, { type: recorder.mimeType || mimeType });
-      if (!blob.size) {
-        reject(new Error('MediaRecorder produced an empty video fixture.'));
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result).split(',')[1]);
-      reader.onerror = () => reject(new Error('Generated fixture could not be read.'));
-      reader.readAsDataURL(blob);
-    };
-    draw();
-    recorder.start();
-    interval = window.setInterval(draw, 50);
-    window.setTimeout(() => recorder.stop(), 1800);
-  }));
-  fixture = Buffer.from(encoded, 'base64');
-  assert.ok(fixture.byteLength > 0);
 
   server = createServer((request, response) => {
     const corsHeaders = {
@@ -159,13 +94,13 @@ try {
   try {
     await expect.poll(() => video.evaluate((element) => element.readyState), { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
   } catch (error) {
-    const mediaState = await video.evaluate((element) => ({
+    const sources = await page.locator('.source-list').textContent();
+    const mediaState = await video.count() ? await video.evaluate((element) => ({
       readyState: element.readyState,
       networkState: element.networkState,
       currentSrc: element.currentSrc,
       error: element.error?.message ?? null,
-    }));
-    const sources = await page.locator('.source-list').textContent();
+    })) : null;
     await page.screenshot({ path: path.join(outputDirectory, 'packaged-video-error.png'), fullPage: true });
     throw new Error(`Packaged video did not decode: ${JSON.stringify({
       mediaState, sources, consoleMessages, failedRequests,
