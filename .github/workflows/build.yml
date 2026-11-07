@@ -65,7 +65,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
       - name: Verify packaged Windows app
         if: matrix.os == 'windows-latest'
-        run: npm run test:desktop
+        run: npm run test:desktop -- "release/win-unpacked/Freeform Live AI.exe"
       - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
@@ -106,16 +106,16 @@ jobs:
           installer="${installers[0]}"
           archive="${installer%.exe}.zip"
           test -f "$archive"
-          version="${installer##*Freeform-}"
+          version="${installer##*Freeform-Live-AI-}"
           version="${version%-win-x64.exe}"
           checksum="$(sha256sum "$installer")"
           checksum="${checksum%% *}"
           cat > release-notes.md <<EOF
           ## Download for Windows
 
-          Download and run \`${installer##*/}\` to install Freeform on 64-bit Windows.
+          Download and run \`${installer##*/}\` to install Freeform Live AI on 64-bit Windows.
 
-          For the portable version, download \`${archive##*/}\`, extract it, and run \`Freeform.exe\`.
+          For the portable version, download \`${archive##*/}\`, extract it, and run \`Freeform Live AI.exe\`.
 
           Built from commit \`${GITHUB_SHA}\` after renderer, unit, browser, and packaged-desktop tests passed.
 
@@ -124,7 +124,7 @@ jobs:
           SHA-256: \`${checksum}\`
           EOF
           tag="windows-build-${GITHUB_RUN_NUMBER}"
-          title="Freeform ${version} for Windows (build ${GITHUB_RUN_NUMBER})"
+          title="Freeform Live AI ${version} for Windows (build ${GITHUB_RUN_NUMBER})"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" "$installer" "$archive" --repo "$GITHUB_REPOSITORY" --clobber
             gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --title "$title" --notes-file release-notes.md --latest
