@@ -1,5 +1,6 @@
 import { RotateCcw, SlidersHorizontal } from 'lucide-react';
 import { useState } from 'react';
+import { useGuideTarget } from '../lib/guideActions';
 import {
   DEFAULT_TRACE_SETTINGS,
   MAX_INTERIOR_NODE_SPACING,
@@ -34,6 +35,8 @@ export function TraceSettingsControl() {
     setError('');
     setOpen(true);
   };
+
+  useGuideTarget('trace-settings', openDialog);
 
   const resetDraft = () => {
     setDraft({
@@ -70,7 +73,7 @@ export function TraceSettingsControl() {
       </button>
       {open && (
         <Dialog title="Trace settings" eyebrow="MESH CREATION / STROKE SAMPLING" onClose={() => setOpen(false)}>
-          <div className="dialog-form">
+          <div className="dialog-form" data-guide-target="trace-settings">
             <p className="form-help">Choose how the source fills new traced players, then tune their mesh geometry. Existing players and nodes are not changed.</p>
             <div className="trace-source-mapping">
               <span className="inspector-heading">SOURCE MAPPING</span>

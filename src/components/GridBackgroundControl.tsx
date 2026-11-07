@@ -2,6 +2,7 @@ import { Grid2X2, ImagePlus, LoaderCircle, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import { DEFAULT_BACKGROUND_COLOR } from '../lib/appearance';
 import { DEFAULT_GRID_GEOMETRY } from '../lib/grid';
+import { useGuideTarget } from '../lib/guideActions';
 import { runtime } from '../lib/runtime';
 import { useWorkspace } from '../store/useWorkspace';
 import { Dialog } from './Dialog';
@@ -86,6 +87,8 @@ export function GridBackgroundControl() {
     pushToast({ title: 'Built-in grid restored', tone: 'info' });
   };
 
+  useGuideTarget('grid', () => { setError(''); setOpen(true); });
+
   return (
     <>
       <button className={background || backgroundColor !== DEFAULT_BACKGROUND_COLOR || geometryModified ? 'active' : ''} title="Customize workspace background and grid" onClick={() => { setError(''); setOpen(true); }}>
@@ -93,7 +96,7 @@ export function GridBackgroundControl() {
       </button>
       {open && (
         <Dialog title="Workspace background" eyebrow="COLOR / GEOMETRY + IMAGE" onClose={() => setOpen(false)}>
-          <div className="dialog-form">
+          <div className="dialog-form" data-guide-target="grid">
             <section className="background-color-section" aria-label="Workspace color settings">
               <div className="grid-geometry-heading"><span className="inspector-heading">WORKSPACE COLOR</span><button type="button" className="text-button" onClick={() => setBackgroundColor(DEFAULT_BACKGROUND_COLOR)}><RotateCcw size={12} />Reset color</button></div>
               <div className="background-color-controls">

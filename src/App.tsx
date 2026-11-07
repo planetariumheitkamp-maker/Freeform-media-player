@@ -8,6 +8,7 @@ import { TopBar } from './components/TopBar';
 import { TransportBar } from './components/TransportBar';
 import { WarpWorkspace } from './components/WarpWorkspace';
 import { WorkspaceToolbar } from './components/WorkspaceToolbar';
+import { GUIDE_TARGETS, useGuideTarget } from './lib/guideActions';
 import { parseProject, reauthorizeProjectBackground, reauthorizeProjectFiles, serializeProject } from './lib/project';
 import { readRecoveryGenerations, recordDiagnostic, writeRecoveryGeneration } from './lib/recovery';
 import { runtime } from './lib/runtime';
@@ -30,6 +31,12 @@ export default function App() {
   const [leftPanelMinimized, setLeftPanelMinimized] = useState(false);
   const [rightPanelMinimized, setRightPanelMinimized] = useState(false);
   const [controlsMinimized, setControlsMinimized] = useState(false);
+
+  useGuideTarget(GUIDE_TARGETS, () => {
+    setLeftPanelMinimized(false);
+    setRightPanelMinimized(false);
+    setControlsMinimized(false);
+  });
 
   useEffect(() => {
     const generations = readRecoveryGenerations(localStorage);

@@ -260,7 +260,7 @@ export function Inspector({ onMinimize }: { onMinimize: () => void }) {
             : 'Enable Planetarium mode to make per-player dome warping available.'}</p>
       </section>
 
-      <section className="inspector-section">
+      <section className="inspector-section" data-guide-target="media-appearance">
         <div className="inspector-heading">MEDIA APPEARANCE{selectedIds.length > 1 ? ' / BATCH' : ''}</div>
         <div className="number-grid">
           <NumberField
@@ -284,7 +284,7 @@ export function Inspector({ onMinimize }: { onMinimize: () => void }) {
         <button className="button subtle full-width" onClick={() => edit({ mediaRotation: 0, mediaScale: 1 })}><RotateCcw size={13} />Reset media transform</button>
       </section>
 
-      <section className="inspector-section live-enhancement-section">
+      <section className="inspector-section live-enhancement-section" data-guide-target="live-ai">
         <div className="inspector-heading"><Sparkles size={12} />LIVE SHARPNESS / AI PROTOTYPE</div>
         <label className="check-field live-enhancement-toggle">
           <input
@@ -339,7 +339,7 @@ export function Inspector({ onMinimize }: { onMinimize: () => void }) {
         )}
       </section>
 
-      <section className="inspector-section">
+      <section className="inspector-section" data-guide-target="color-light">
         <div className="inspector-heading">COLOR & LIGHT{selectedIds.length > 1 ? ' / BATCH' : ''}</div>
         <VisualRangeField label="Brightness" field="brightness" value={visual.brightness} min={0} max={2} step={0.01} display={`${Math.round(visual.brightness * 100)}%`} onChange={editVisual} />
         <VisualRangeField label="Contrast" field="contrast" value={visual.contrast} min={0} max={2} step={0.01} display={`${Math.round(visual.contrast * 100)}%`} onChange={editVisual} />

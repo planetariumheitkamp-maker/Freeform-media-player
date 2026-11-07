@@ -242,7 +242,7 @@ export function SourceRail({ onMinimize }: { onMinimize: () => void }) {
 
   return (
     <aside className="source-rail">
-      <section className="rail-section sources-section">
+      <section className="rail-section sources-section" data-guide-target="sources">
         <div className="section-heading">
           <span>SOURCES</span>
           <div className="section-heading-actions">
@@ -300,7 +300,7 @@ export function SourceRail({ onMinimize }: { onMinimize: () => void }) {
         <div className="rail-note">Select a source to assign it. Grouped players receive it together.</div>
       </section>
 
-      <section className="rail-section players-section">
+      <section className="rail-section players-section" data-guide-target="players">
         <div className="section-heading">
           <span>PLAYERS</span>
           <button className="icon-button tiny" title="Add player" onClick={() => addPlayer(active?.sourceId)}><Plus size={14} /></button>

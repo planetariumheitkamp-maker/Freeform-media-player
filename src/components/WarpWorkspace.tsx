@@ -985,9 +985,23 @@ export function WarpWorkspace() {
     : point;
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (presentation || (event.button !== 0 && event.button !== 1 && event.button !== 2)) return;
+    if (event.button !== 0 && event.button !== 1 && event.button !== 2) return;
     const screen = eventPoint(event);
     const world = screenToWorld(viewRef.current, screen);
+    if (presentation) {
+      if (event.button !== 0) return;
+      const player = hitPlayer(world);
+      if (!player || player.locked) return;
+      useWorkspace.getState().beginHistory('Move player in Present mode');
+      dragRef.current = {
+        type: 'move', playerId: player.id, playerIds: [player.id],
+        initialPlayers: players,
+        start: world, last: world, lastDelta: { x: 0, y: 0 },
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+      event.preventDefault();
+      return;
+    }
     if (event.button !== 0 || event.altKey) {
       dragRef.current = { type: 'pan', last: screen };
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -1132,7 +1146,7 @@ export function WarpWorkspace() {
     if (drag.type === 'move') {
       const currentPlayers = useWorkspace.getState().players;
       const moving = currentPlayers.filter((candidate) => drag.playerIds.includes(candidate.id));
-      if (moving.length && moving.every((candidate) => !displayDomeWarp(candidate))) {
+      if (!presentation && moving.length && moving.every((candidate) => !displayDomeWarp(candidate))) {
         const raw = { x: world.x - drag.start.x, y: world.y - drag.start.y };
         const snapped = smartSnap(drag.initialPlayers, drag.playerIds, raw, 8 / scaleFor(viewRef.current));
         movePlayers(drag.playerIds, {
@@ -1295,7 +1309,7 @@ export function WarpWorkspace() {
   useEffect(() => {
     const handleZoomShortcut = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      if (event.key.toLowerCase() !== 'f' || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey
+      if (presentation || event.key.toLowerCase() !== 'f' || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey
         || target?.matches('input, textarea, select, [contenteditable="true"]')) return;
       event.preventDefault();
       zoomToSelection();
@@ -1371,7 +1385,7 @@ export function WarpWorkspace() {
       onWheel={handleWheel}
       onContextMenu={(event) => event.preventDefault()}
       onDoubleClick={(event) => {
-        if (tool !== 'select' || !active || active.mode !== 'advanced' || active.locked) return;
+        if (presentation || tool !== 'select' || !active || active.mode !== 'advanced' || active.locked) return;
         const hit = hitHandle(screenToWorld(viewRef.current, eventPoint(event)));
         if (hit?.nodeId) deleteNode(active.id, hit.nodeId);
       }}
@@ -1475,9 +1489,9 @@ export function WarpWorkspace() {
         </div>
       )}
 
-      <div className="viewport-status">
+      <div className={`viewport-status${presentation ? ' presentation-hint' : ''}`}>
         <span>{players.length} {players.length === 1 ? 'SURFACE' : 'SURFACES'}</span>
-        <span>{toolInstruction}</span>
+        <span>{presentation ? 'DRAG A PLAYER TO REPOSITION · ESC EXITS' : toolInstruction}</span>
       </div>
       {!presentation && (
         <div className="viewport-zoom" onPointerDown={(event) => event.stopPropagation()}>

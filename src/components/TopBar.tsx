@@ -1,9 +1,11 @@
-import { FolderOpen, History, Library, Package, PanelTopClose, Play, Redo2, Save, ShieldCheck, Undo2 } from 'lucide-react';
+import { BookOpen, FolderOpen, History, Library, Package, PanelTopClose, Play, Redo2, Save, ShieldCheck, Undo2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { useGuideTarget } from '../lib/guideActions';
 import { createPortableProject, parseProject, reauthorizeProjectBackground, reauthorizeProjectFiles, serializeProject } from '../lib/project';
 import { runtime } from '../lib/runtime';
 import { useWorkspace } from '../store/useWorkspace';
 import type { ProjectFile } from '../types';
+import { FeatureGuideDialog } from './FeatureGuideDialog';
 import { useMedia } from './MediaContext';
 import { HistoryDialog } from './HistoryDialog';
 import { RecoveryDialog } from './RecoveryDialog';
@@ -22,6 +24,7 @@ export function TopBar({ onMinimizeAll }: { onMinimizeAll: () => void }) {
   const [savedWorkspacesOpen, setSavedWorkspacesOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const { stopStream } = useMedia();
 
   const restoreProject = useCallback(async (project: ProjectFile, title: string) => {
@@ -109,6 +112,11 @@ export function TopBar({ onMinimizeAll }: { onMinimizeAll: () => void }) {
     }
   };
 
+  useGuideTarget('present', () => { void present(); });
+  useGuideTarget('saves', () => setSavedWorkspacesOpen(true));
+  useGuideTarget('history', () => setHistoryOpen(true));
+  useGuideTarget('recovery', () => setRecoveryOpen(true));
+
   return (
     <>
       <header className="top-bar">
@@ -124,16 +132,18 @@ export function TopBar({ onMinimizeAll }: { onMinimizeAll: () => void }) {
         <div className="top-actions">
           <button className="icon-button" aria-label="Undo" title="Undo (Ctrl+Z)" disabled={!canUndo} onClick={() => useWorkspace.getState().undo()}><Undo2 size={15} /></button>
           <button className="icon-button" aria-label="Redo" title="Redo (Ctrl+Y)" disabled={!canRedo} onClick={() => useWorkspace.getState().redo()}><Redo2 size={15} /></button>
-          <button className="icon-button" aria-label="Edit history" title="Edit history" onClick={() => setHistoryOpen(true)}><History size={15} /></button>
-          <button className="icon-button" aria-label="Recovery and diagnostics" title="Recovery & diagnostics" onClick={() => setRecoveryOpen(true)}><ShieldCheck size={15} /></button>
-          <button className="button subtle" onClick={() => setSavedWorkspacesOpen(true)}><Library size={14} />Saves</button>
+          <button data-guide-target="history" className="icon-button" aria-label="Edit history" title="Edit history" onClick={() => setHistoryOpen(true)}><History size={15} /></button>
+          <button data-guide-target="recovery" className="icon-button" aria-label="Recovery and diagnostics" title="Recovery & diagnostics" onClick={() => setRecoveryOpen(true)}><ShieldCheck size={15} /></button>
+          <button data-guide-target="saves" className="button subtle" onClick={() => setSavedWorkspacesOpen(true)}><Library size={14} />Saves</button>
           <button className="button subtle" onClick={() => void openFromFile()}><FolderOpen size={14} />Open</button>
           <button className="button subtle" onClick={() => void saveToFile()}><Save size={14} />Save file</button>
           <button className="button subtle" title="Export a workspace with connected local media embedded" onClick={() => void savePortable()}><Package size={14} />Portable</button>
+          <button className="button subtle" title="Open the interactive feature guide" onClick={() => setGuideOpen(true)}><BookOpen size={14} />Guide</button>
           <button className="icon-button" aria-label="Hide all control panels" title="Hide all control panels (Shift+F)" onClick={onMinimizeAll}><PanelTopClose size={15} /></button>
-          <button className="button primary" onClick={() => void present()}><Play size={14} />Present</button>
+          <button data-guide-target="present" className="button primary" onClick={() => void present()}><Play size={14} />Present</button>
         </div>
       </header>
+      {guideOpen && <FeatureGuideDialog onClose={() => setGuideOpen(false)} />}
       {historyOpen && <HistoryDialog onClose={() => setHistoryOpen(false)} />}
       {recoveryOpen && <RecoveryDialog onClose={() => setRecoveryOpen(false)} onRestore={restoreProject} />}
       {savedWorkspacesOpen && (

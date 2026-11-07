@@ -1,5 +1,6 @@
 import { Maximize2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useGuideTarget } from '../lib/guideActions';
 import {
   DEFAULT_OUTPUT_SIZE,
   MAX_OUTPUT_DIMENSION,
@@ -68,6 +69,8 @@ export function OutputSizeControl() {
     setOpen(true);
   };
 
+  useGuideTarget('output', openDialog);
+
   const choosePreset = (width: number, height: number) => {
     setDraft({ width: String(width), height: String(height) });
     setError('');
@@ -91,7 +94,7 @@ export function OutputSizeControl() {
       </button>
       {open && (
         <Dialog title="Output size" eyebrow="WORKSPACE / DIMENSIONS" onClose={() => setOpen(false)}>
-          <div className="dialog-form">
+          <div className="dialog-form" data-guide-target="output">
             <p className="form-help">Choose a preset or enter custom dimensions. Players keep their positions and shapes, and an imported grid is refitted without distortion.</p>
             <div className="output-size-presets" aria-label="Output size presets">
               {presets.map((preset) => (

@@ -8,6 +8,7 @@ import {
 } from '../lib/dome';
 import { solveDomeCalibration, type DomeCalibrationResult } from '../lib/domeCalibration';
 import { DOME_PRESETS, DOME_PROJECTION_MODELS } from '../lib/domePresets';
+import { useGuideTarget } from '../lib/guideActions';
 import { useWorkspace } from '../store/useWorkspace';
 import type {
   DomeCalibrationPoint,
@@ -166,6 +167,11 @@ export function PlanetariumControl() {
     setPlanetariumSettings({ installation: { ...settings.installation, ...patch } });
   };
 
+  useGuideTarget(['planetarium-setup', 'planetarium-calibration', 'planetarium-installation', 'planetarium-preview'], (target) => {
+    setTab(target.replace('planetarium-', '') as PlanetariumTab);
+    setOpen(true);
+  });
+
   return (
     <>
       <button className={settings.enabled ? 'active' : ''} title="Configure single-projector dome warping" onClick={() => setOpen(true)}>
@@ -175,7 +181,7 @@ export function PlanetariumControl() {
         <Dialog title="Planetarium mode" eyebrow="DOME / SINGLE FISHEYE PROJECTOR" onClose={() => setOpen(false)}>
           <div className="planetarium-tabs" role="tablist" aria-label="Planetarium settings">
             {(['setup', 'calibration', 'installation', 'preview'] as const).map((name) => (
-              <button key={name} role="tab" aria-selected={tab === name} className={tab === name ? 'active' : ''} onClick={() => setTab(name)}>{name[0].toUpperCase() + name.slice(1)}</button>
+              <button key={name} data-guide-target={`planetarium-${name}`} role="tab" aria-selected={tab === name} className={tab === name ? 'active' : ''} onClick={() => setTab(name)}>{name[0].toUpperCase() + name.slice(1)}</button>
             ))}
           </div>
           <div className="planetarium-panel">
