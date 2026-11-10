@@ -80,7 +80,7 @@ test('background colors render, survive presentation and reload, and reset', asy
   await expect.poll(() => savedValue(page, (project) => project.backgroundColor)).toBe('#28445f');
 
   await page.getByRole('button', { name: 'Present', exact: true }).click();
-  await expect(page.getByRole('button', { name: /Exit presentation/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Present controls', exact: true })).toBeVisible();
   await expect(page.locator('.top-bar')).toHaveCount(0);
   await expect(page.locator('canvas.warp-canvas')).toHaveAttribute('data-background-color', '#28445f');
   await expect.poll(() => page.locator('canvas.warp-canvas').evaluate((source) => {
@@ -91,7 +91,7 @@ test('background colors render, survive presentation and reload, and reset', asy
     const pixel = context?.getImageData(0, 0, 1, 1).data;
     return pixel ? `#${[...pixel.slice(0, 3)].map((channel) => channel.toString(16).padStart(2, '0')).join('')}` : '';
   })).toBe('#28445f');
-  await page.getByRole('button', { name: /Exit presentation/ }).click();
+  await page.keyboard.press('Escape');
   await page.reload();
   await expect(page.locator('canvas.warp-canvas')).toHaveAttribute('data-background-color', '#28445f');
   await page.getByRole('button', { name: 'Grid', exact: true }).click();

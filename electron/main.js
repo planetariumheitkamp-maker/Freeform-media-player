@@ -6,17 +6,51 @@ import {
   ipcMain,
   net,
   protocol,
+  screen,
   session,
   systemPreferences,
 } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { canUseMainWindowCapture } from './capturePermissions.js';
+import { createProviderCaptureController } from './providerCaptureWindow.js';
+import { isMainWindowFrame } from './providerCaptureRules.js';
+import { verifyCustomSource } from './customSourceVerification.js';
+import { createRecordingController } from './recordings.js';
+import { resizeWindowBounds, resolveWindowPlacement, WINDOW_RESIZE_DIRECTIONS } from './presentationWindow.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const allowedMediaPaths = new Set();
+const MAIN_WINDOW_MINIMUM_SIZE = [1080, 700];
 let mainWindow;
 let pendingDesktopRequest = null;
+let presentationWindowLocked = false;
+let applyingWindowPlacement = false;
+let presentationNormalPlacement = null;
+let windowResizeSession = null;
+
+function finishWindowResize() {
+  windowResizeSession = null;
+}
+
+function getMainWindowPlacement() {
+  if (!mainWindow) return null;
+  if (presentationNormalPlacement) return { ...presentationNormalPlacement };
+  const bounds = mainWindow.getNormalBounds();
+  const display = screen.getDisplayMatching(bounds);
+  return { ...bounds, displayId: String(display.id) };
+}
+
+const providerCapture = createProviderCaptureController({
+  getMainWindow: () => mainWindow,
+  emit: (state) => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send('provider:capture-state', state);
+    }
+  },
+});
+const recordings = createRecordingController({ getMainWindow: () => mainWindow, describeFile });
 
 // The desktop app hosts trusted local UI code. Allow its sandboxed AI worker to
 // use a bounded WASM thread pool without requiring cross-origin isolation for
@@ -132,8 +166,95 @@ function registerProjectHandlers() {
     return { canceled: false, path: filePath, content };
   });
 
-  ipcMain.handle('window:fullscreen', async (_event, value) => {
-    mainWindow?.setFullScreen(Boolean(value));
+  ipcMain.handle('window:fullscreen', async (event, value) => {
+    if (!isMainWindowFrame(event.senderFrame, mainWindow)) throw new Error('Only Freeform can change the window.');
+    finishWindowResize();
+    if (value) {
+      // Some Windows configurations expand the window without reporting
+      // isFullScreen(). Keep the editing bounds independently of either path.
+      presentationNormalPlacement ??= getMainWindowPlacement();
+      mainWindow?.setFullScreen(true);
+    } else {
+      mainWindow?.setFullScreen(false);
+      presentationNormalPlacement = null;
+    }
+  });
+
+  ipcMain.handle('window:get-placement', (event) => {
+    if (!isMainWindowFrame(event.senderFrame, mainWindow)) return null;
+    return getMainWindowPlacement();
+  });
+
+  ipcMain.handle('window:set-placement', (event, input) => {
+    if (!isMainWindowFrame(event.senderFrame, mainWindow) || !mainWindow) return null;
+    const placement = resolveWindowPlacement(
+      input,
+      screen.getAllDisplays(),
+      mainWindow.getNormalBounds(),
+      MAIN_WINDOW_MINIMUM_SIZE,
+    );
+    if (!placement) return null;
+    applyingWindowPlacement = true;
+    try {
+      if (mainWindow.isFullScreen()) mainWindow.setFullScreen(false);
+      // Unlocking cannot clear this transparent window's native size limits.
+      mainWindow.setMaximumSize(0, 0);
+      mainWindow.setBounds(placement);
+    } finally {
+      applyingWindowPlacement = false;
+    }
+    return { ...mainWindow.getNormalBounds(), displayId: placement.displayId };
+  });
+
+  ipcMain.handle('window:set-locked', (event, value) => {
+    if (!isMainWindowFrame(event.senderFrame, mainWindow)) throw new Error('Only Freeform can lock the window.');
+    presentationWindowLocked = Boolean(value);
+    if (presentationWindowLocked) finishWindowResize();
+    if (!mainWindow) return;
+    mainWindow.setMovable(!presentationWindowLocked);
+    mainWindow.setResizable(!presentationWindowLocked);
+  });
+
+  ipcMain.handle('window:begin-resize', (event, direction, cursor) => {
+    if (!isMainWindowFrame(event.senderFrame, mainWindow) || !mainWindow) return false;
+    if (presentationWindowLocked || !WINDOW_RESIZE_DIRECTIONS.has(direction)
+      || mainWindow.isFullScreen() || mainWindow.isMaximized()) return false;
+    const nativeCursor = screen.getCursorScreenPoint();
+    windowResizeSession = {
+      direction,
+      bounds: mainWindow.getBounds(),
+      cursor: {
+        x: Number.isFinite(cursor?.x) ? cursor.x : nativeCursor.x,
+        y: Number.isFinite(cursor?.y) ? cursor.y : nativeCursor.y,
+      },
+    };
+    return true;
+  });
+
+  ipcMain.handle('window:update-resize', (event, cursor) => {
+    if (!isMainWindowFrame(event.senderFrame, mainWindow) || !mainWindow || !windowResizeSession) return null;
+    if (presentationWindowLocked || !Number.isFinite(cursor?.x) || !Number.isFinite(cursor?.y)) return null;
+    const session = windowResizeSession;
+    const bounds = resizeWindowBounds(
+      session.bounds,
+      { x: cursor.x - session.cursor.x, y: cursor.y - session.cursor.y },
+      session.direction,
+      MAIN_WINDOW_MINIMUM_SIZE,
+    );
+    // Windows constrains programmatic sizing while this transparent window is
+    // natively non-resizable. Release that constraint for this trusted IPC update.
+    mainWindow.setMaximumSize(0, 0);
+    mainWindow.setBounds(bounds);
+    return { ...mainWindow.getBounds(), displayId: String(screen.getDisplayMatching(mainWindow.getBounds()).id) };
+  });
+
+  ipcMain.handle('window:end-resize', (event) => {
+    if (isMainWindowFrame(event.senderFrame, mainWindow)) finishWindowResize();
+  });
+
+  ipcMain.handle('window:transparency', (event, value) => {
+    if (!isMainWindowFrame(event.senderFrame, mainWindow)) throw new Error('Only Freeform can change transparency.');
+    mainWindow?.setBackgroundColor(value ? '#00000000' : '#1f1f1f');
   });
 }
 
@@ -162,24 +283,45 @@ function registerCaptureHandlers() {
       : 'not-required',
   }));
 
-  ipcMain.handle('desktop:prepare', (_event, id, withAudio) => {
+  ipcMain.handle('desktop:prepare', (event, id, withAudio) => {
+    if (!isMainWindowFrame(event.senderFrame, mainWindow)) throw new Error('Only Freeform can prepare desktop capture.');
     if (typeof id !== 'string' || !id) throw new Error('A desktop source is required.');
+    providerCapture.cancelPending();
     pendingDesktopRequest = { id, withAudio: Boolean(withAudio) };
   });
-
-  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-    const ours = mainWindow && webContents.id === mainWindow.webContents.id;
-    callback(Boolean(ours && (permission === 'media' || permission === 'display-capture')));
+  ipcMain.handle('provider:open', (event, input) => providerCapture.open(event, input));
+  ipcMain.handle('provider:set-ad-block', (event, settings) => providerCapture.setAdBlock(event, settings));
+  ipcMain.handle('provider:prepare', (event, id, withAudio) => {
+    pendingDesktopRequest = null;
+    providerCapture.prepare(event, id, withAudio);
   });
-  session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
-    const ours = mainWindow && webContents.id === mainWindow.webContents.id;
-    return Boolean(ours && (permission === 'media' || permission === 'display-capture'));
+  ipcMain.handle('provider:close', (event, id) => providerCapture.close(event, id));
+  ipcMain.handle('custom:verify', async (event, input) => {
+    if (!isMainWindowFrame(event.senderFrame, mainWindow)) throw new Error('Only Freeform can verify custom sources.');
+    return verifyCustomSource(input);
+  });
+  ipcMain.handle('recording:state', (event) => recordings.getState(event));
+  ipcMain.handle('recording:choose-directory', (event) => recordings.chooseDirectory(event));
+  ipcMain.handle('recording:start', (event, input) => recordings.start(event, input));
+  ipcMain.handle('recording:append', (event, id, chunk) => recordings.append(event, id, chunk));
+  ipcMain.handle('recording:finish', (event, id) => recordings.finish(event, id));
+  ipcMain.handle('recording:discard', (event, id) => recordings.discard(event, id));
+  ipcMain.handle('recording:list', (event) => recordings.list(event));
+  ipcMain.handle('recording:open', (event, name) => recordings.open(event, name));
+  ipcMain.handle('recording:show-folder', (event) => recordings.showFolder(event));
+
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    callback(canUseMainWindowCapture(webContents, mainWindow, permission, details));
+  });
+  session.defaultSession.setPermissionCheckHandler((webContents, permission, _origin, details) => {
+    return canUseMainWindowCapture(webContents, mainWindow, permission, details);
   });
 
-  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    if (providerCapture.handleDisplayRequest(request, callback)) return;
     const requested = pendingDesktopRequest;
     pendingDesktopRequest = null;
-    if (!requested) {
+    if (!requested || !isMainWindowFrame(request.frame, mainWindow)) {
       callback(null);
       return;
     }
@@ -204,10 +346,12 @@ async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1500,
     height: 950,
-    minWidth: 1080,
-    minHeight: 700,
+    minWidth: MAIN_WINDOW_MINIMUM_SIZE[0],
+    minHeight: MAIN_WINDOW_MINIMUM_SIZE[1],
+    resizable: true,
     title: 'Freeform Live AI — Prototype',
-    backgroundColor: '#1f1f1f',
+    backgroundColor: '#00000000',
+    transparent: true,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -218,6 +362,13 @@ async function createWindow() {
     },
   });
 
+  mainWindow.on('will-move', (event) => {
+    if (presentationWindowLocked && !applyingWindowPlacement) event.preventDefault();
+  });
+  mainWindow.on('will-resize', (event) => {
+    if (presentationWindowLocked && !applyingWindowPlacement) event.preventDefault();
+  });
+
   const rendererUrl = process.env.ELECTRON_RENDERER_URL;
   if (rendererUrl) {
     await mainWindow.loadURL(rendererUrl);
@@ -225,6 +376,10 @@ async function createWindow() {
     await mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
   mainWindow.on('closed', () => {
+    finishWindowResize();
+    presentationWindowLocked = false;
+    presentationNormalPlacement = null;
+    providerCapture.closeAll();
     mainWindow = null;
   });
 }

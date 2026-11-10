@@ -25,6 +25,12 @@ import { normalizeGroups } from '../lib/groups';
 import { createInteriorTraceNodes, createTracedShape } from '../lib/trace';
 import { DEFAULT_TRACE_SETTINGS, normalizeTraceSettings } from '../lib/traceSettings';
 import {
+  capturePresentLayout,
+  DEFAULT_PRESENT_SETTINGS,
+  normalizePresentSettings,
+  restorePresentLayout,
+} from '../lib/present';
+import {
   alignPlayers,
   distributePlayers,
   resizePlayers,
@@ -48,6 +54,8 @@ import type {
   WorkspaceGridGeometry,
   WorkspaceOutputSize,
   WorkspacePlanetariumSettings,
+  WorkspacePresentSettings,
+  WorkspacePresentSettingsInput,
   WorkspaceTraceSettings,
 } from '../types';
 
@@ -65,6 +73,7 @@ interface WorkspaceState {
   renderQuality: RenderQuality;
   traceSettings: WorkspaceTraceSettings;
   planetariumSettings: WorkspacePlanetariumSettings;
+  presentSettings: WorkspacePresentSettings;
   selectedIds: string[];
   selectedNodes: Record<string, string[]>;
   activeId: string | null;
@@ -121,6 +130,8 @@ interface WorkspaceState {
   setTool: (tool: EditorTool) => void;
   setShowMesh: (value: boolean) => void;
   setPresentation: (value: boolean) => void;
+  setPresentSettings: (patch: WorkspacePresentSettingsInput) => void;
+  lockPresentLayout: (windowPlacement?: WorkspacePresentSettings['windowPlacement']) => void;
   setLiveEnhancementStatus: (playerId: string, status: LiveEnhancementRuntimeStatus) => void;
   canUndo: boolean;
   canRedo: boolean;
@@ -286,6 +297,7 @@ export const useWorkspace = create<WorkspaceState>()((rawSet, get) => {
     renderQuality: DEFAULT_RENDER_QUALITY,
     traceSettings: { ...DEFAULT_TRACE_SETTINGS },
     planetariumSettings: { ...DEFAULT_PLANETARIUM_SETTINGS },
+    presentSettings: normalizePresentSettings(DEFAULT_PRESENT_SETTINGS),
     selectedIds: [firstPlayer.id],
     selectedNodes: {},
     activeId: firstPlayer.id,
@@ -506,6 +518,7 @@ export const useWorkspace = create<WorkspaceState>()((rawSet, get) => {
     movePlayer: (id, delta) => get().movePlayers([id], delta),
 
     movePlayers: (ids, delta) => set((state) => {
+      if (state.presentation && state.presentSettings.layoutLocked) return state;
       const requested = new Set(ids);
       return {
         players: state.players.map((player) => requested.has(player.id) && !player.locked ? {
@@ -756,7 +769,34 @@ export const useWorkspace = create<WorkspaceState>()((rawSet, get) => {
 
     setTool: (tool) => set({ tool }),
     setShowMesh: (showMesh) => set({ showMesh }),
-    setPresentation: (presentation) => set({ presentation }),
+    setPresentation: (presentation) => {
+      const state = get();
+      if (!presentation || !state.presentSettings.layoutLocked) {
+        rawSet({ presentation });
+        return;
+      }
+      const restored = restorePresentLayout(
+        state.players,
+        state.outputSize,
+        state.presentSettings.lockedLayout,
+      );
+      rawSet({ presentation, players: restored.players, outputSize: restored.output });
+    },
+    setPresentSettings: (patch) => rawSet((state) => ({
+      presentSettings: normalizePresentSettings({
+        ...state.presentSettings,
+        ...patch,
+        ambient: { ...state.presentSettings.ambient, ...patch.ambient },
+      }),
+    })),
+    lockPresentLayout: (windowPlacement) => rawSet((state) => ({
+      presentSettings: normalizePresentSettings({
+        ...state.presentSettings,
+        layoutLocked: true,
+        lockedLayout: capturePresentLayout(state.players, state.outputSize),
+        windowPlacement: windowPlacement ?? state.presentSettings.windowPlacement,
+      }),
+    })),
     setLiveEnhancementStatus: (playerId, status) => {
       const current = get().liveEnhancementStatus[playerId];
       if (current?.phase === status.phase
@@ -797,7 +837,8 @@ export const useWorkspace = create<WorkspaceState>()((rawSet, get) => {
     loadProject: (project) => {
       const sources = project.sources.map((source) => ({
         ...source,
-        connected: source.kind === 'stream' || source.kind === 'test' ? true : false,
+        connected: source.kind === 'stream' || source.kind === 'test'
+          || (source.kind === 'catalog' && source.catalog?.playbackMode === 'native') ? true : false,
       }));
       if (!sources.some((source) => source.id === TEST_SOURCE.id)) sources.unshift(TEST_SOURCE);
       const players = project.players.map((player) => ({
@@ -821,6 +862,7 @@ export const useWorkspace = create<WorkspaceState>()((rawSet, get) => {
         renderQuality: normalizeRenderQuality(project.quality),
         traceSettings: normalizeTraceSettings(project.trace ?? DEFAULT_TRACE_SETTINGS),
         planetariumSettings: normalizePlanetariumSettings(project.planetarium ?? DEFAULT_PLANETARIUM_SETTINGS),
+        presentSettings: normalizePresentSettings(project.present ?? DEFAULT_PRESENT_SETTINGS),
         selectedIds: players[0] ? [players[0].id] : [],
         selectedNodes: {},
         activeId: players[0]?.id ?? null,

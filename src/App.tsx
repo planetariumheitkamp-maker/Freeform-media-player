@@ -1,12 +1,14 @@
-import { ChevronsLeft, ChevronsRight, Maximize2, Minimize2 } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, Maximize2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Inspector } from './components/Inspector';
 import { MediaLayer } from './components/MediaLayer';
+import { PresentControls } from './components/PresentControls';
 import { SourceRail } from './components/SourceRail';
 import { Toasts } from './components/Toasts';
 import { TopBar } from './components/TopBar';
 import { TransportBar } from './components/TransportBar';
 import { WarpWorkspace } from './components/WarpWorkspace';
+import { WindowResizeHandles } from './components/WindowResizeHandles';
 import { WorkspaceToolbar } from './components/WorkspaceToolbar';
 import { GUIDE_TARGETS, useGuideTarget } from './lib/guideActions';
 import { parseProject, reauthorizeProjectBackground, reauthorizeProjectFiles, serializeProject } from './lib/project';
@@ -16,6 +18,7 @@ import { useWorkspace } from './store/useWorkspace';
 
 export default function App() {
   const presentation = useWorkspace((state) => state.presentation);
+  const presentSettings = useWorkspace((state) => state.presentSettings);
   const selectedIds = useWorkspace((state) => state.selectedIds);
   const copyPlayers = useWorkspace((state) => state.copyPlayers);
   const pastePlayers = useWorkspace((state) => state.pastePlayers);
@@ -78,7 +81,8 @@ export default function App() {
         && state.outputSize === previous.outputSize && state.outputOpacity === previous.outputOpacity
         && state.renderQuality === previous.renderQuality
         && state.traceSettings === previous.traceSettings
-        && state.planetariumSettings === previous.planetariumSettings) return;
+        && state.planetariumSettings === previous.planetariumSettings
+        && state.presentSettings === previous.presentSettings) return;
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
         try {
@@ -108,25 +112,70 @@ export default function App() {
     };
   }, []);
 
+  const enterPresentation = useCallback(() => {
+    void (async () => {
+      const settings = useWorkspace.getState().presentSettings;
+      let nativeWarning: string | undefined;
+      if (runtime.isDesktop) {
+        if (settings.layoutLocked && settings.windowPlacement) {
+          try {
+            await runtime.setWindowPlacement(settings.windowPlacement);
+          } catch (error) {
+            nativeWarning = error instanceof Error ? error.message : 'The saved window position could not be restored.';
+          }
+        }
+        try {
+          await runtime.setWindowLocked(settings.layoutLocked);
+          await runtime.setTransparency(settings.transparency);
+        } catch (error) {
+          nativeWarning = error instanceof Error ? error.message : 'Some native Present settings are unavailable.';
+        }
+      }
+      setPresentation(true);
+      try {
+        await runtime.setFullscreen(true);
+      } catch {
+        pushToast({ title: 'Presentation is windowed', detail: 'The operating system did not grant fullscreen.', tone: 'info' });
+      }
+      if (nativeWarning) pushToast({ title: 'Present restored with a window fallback', detail: nativeWarning, tone: 'warning' });
+    })();
+  }, [pushToast, setPresentation]);
+
   const exitPresentation = useCallback(() => {
+    const settings = useWorkspace.getState().presentSettings;
     setPresentation(false);
-    void runtime.setFullscreen(false).catch(() => undefined);
+    void (async () => {
+      await runtime.setFullscreen(false).catch(() => undefined);
+      if (runtime.isDesktop && settings.layoutLocked && settings.windowPlacement) {
+        await runtime.setWindowPlacement(settings.windowPlacement).catch(() => null);
+      }
+      if (runtime.isDesktop) {
+        await Promise.allSettled([runtime.setTransparency(false), runtime.setWindowLocked(false)]);
+      }
+    })();
   }, [setPresentation]);
+
+  useEffect(() => {
+    const transparent = presentation && presentSettings.transparency;
+    document.documentElement.classList.toggle('present-transparent-native', transparent);
+    return () => document.documentElement.classList.remove('present-transparent-native');
+  }, [presentation, presentSettings.transparency]);
 
   useEffect(() => {
     if (runtime.isDesktop) return;
     const handleFullscreen = () => {
-      if (!document.fullscreenElement && useWorkspace.getState().presentation) setPresentation(false);
+      if (!document.fullscreenElement && useWorkspace.getState().presentation) exitPresentation();
     };
     document.addEventListener('fullscreenchange', handleFullscreen);
     return () => document.removeEventListener('fullscreenchange', handleFullscreen);
-  }, [setPresentation]);
+  }, [exitPresentation]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const editing = target?.matches('input, textarea, select, [contenteditable="true"]');
       if (event.key === 'Escape') {
+        if (document.querySelector('.dialog-backdrop')) return;
         setTool('select');
         setControlsMinimized(false);
         if (useWorkspace.getState().presentation) exitPresentation();
@@ -191,9 +240,9 @@ export default function App() {
 
   const panelsHidden = presentation || controlsMinimized;
   return (
-    <div className={`app-shell${presentation ? ' is-presenting' : ''}${controlsMinimized ? ' is-focus-mode' : ''}`}>
+    <div className={`app-shell${presentation ? ' is-presenting' : ''}${presentation && presentSettings.transparency ? ' is-present-transparent' : ''}${controlsMinimized ? ' is-focus-mode' : ''}`}>
       <MediaLayer />
-      {!panelsHidden && <TopBar onMinimizeAll={() => setControlsMinimized(true)} />}
+      {!panelsHidden && <TopBar onMinimizeAll={() => setControlsMinimized(true)} onPresent={enterPresentation} />}
       <div className={`app-body${leftPanelMinimized ? ' left-panel-minimized' : ''}${rightPanelMinimized ? ' right-panel-minimized' : ''}${controlsMinimized ? ' controls-minimized' : ''}`}>
         {!panelsHidden && !leftPanelMinimized && <SourceRail onMinimize={() => setLeftPanelMinimized(true)} />}
         {!panelsHidden && leftPanelMinimized && (
@@ -210,7 +259,8 @@ export default function App() {
         )}
       </div>
       {controlsMinimized && !presentation && <button className="restore-controls button" aria-label="Show control panels" title="Show control panels (Shift+F or Esc)" onClick={() => setControlsMinimized(false)}><Maximize2 size={14} />Show control panels <kbd>Shift+F</kbd></button>}
-      {presentation && <button className="exit-presentation" onClick={exitPresentation}><Minimize2 size={15} />Exit presentation <kbd>ESC</kbd></button>}
+      {presentation && <PresentControls onExit={exitPresentation} />}
+      {runtime.isDesktop && runtime.platform === 'win32' && !presentation && <WindowResizeHandles />}
       <Toasts />
     </div>
   );

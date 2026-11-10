@@ -9,6 +9,8 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import { MediaProvider } from './components/MediaContext';
 import './styles.css';
+import './catalog.css';
+import './custom-sources.css';
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>

@@ -60,6 +60,18 @@ Redistribution and use in source and binary forms, with or without modification,
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+## Original Catalog media and artwork
+
+The videos and poster artwork under `public/catalog/` are original procedural assets generated specifically for this project and distributed under the project license. No third-party catalog movies, episodes, poster images, provider media, or provider artwork are bundled.
+
+## External provider embeds
+
+Catalog can open user-requested official player pages from Vidqueen, Vidrift, Vidbolt, Cinezo, and VidLink using a manually entered TMDB ID. Their media, artwork, subtitles, advertising, and other third-party content are not bundled with Freeform. A provider request occurs only after the user submits the playback form and confirms authorization. Changing the form or selecting another provider closes the dedicated desktop player window; browser popups must be closed manually.
+
+Official embed documentation was reviewed, but provider content rights were not independently verified. This integration is not a statement that any particular title is licensed or authorized. Users are responsible for their own authorization and for complying with provider terms. Freeform does not scrape provider pages, resolve underlying streams, or bypass DRM or access controls. Vidmario, VidCine, VidUp, and VSEmbed remain disabled.
+
+This workflow does not call the TMDB API or fetch TMDB metadata; the numeric ID is supplied by the user. Dedicated desktop windows can be captured into the native WebGL mesh renderer; isolated browser popups are preview-only. The optional built-in desktop request blocker uses local hostname rules rather than AdGuard Home or a bundled third-party filter list, and it does not change system DNS.
+
 ## Build and test dependencies
 
 | Package | Locked version | License |

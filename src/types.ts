@@ -1,4 +1,4 @@
-export type SourceKind = 'test' | 'file' | 'stream' | 'desktop' | 'device';
+export type SourceKind = 'test' | 'file' | 'stream' | 'catalog' | 'desktop' | 'device' | 'provider';
 export type MediaType = 'video' | 'audio' | 'image' | 'capture' | 'test';
 export type LinkMode = 'source' | 'transport';
 export type EditorTool = 'select' | 'add-border' | 'add-interior' | 'trace-border' | 'trace-interior';
@@ -6,6 +6,70 @@ export type EditorMode = 'quick' | 'advanced';
 export type TestPatternKind = 'orientation' | 'crosshatch' | 'starfield' | 'convergence' | 'latitude';
 export type DomeProjectionModel = 'equidistant' | 'equisolid' | 'stereographic';
 export type DomePreviewMode = 'projector' | 'unwarped' | 'audience';
+export type CatalogMediaKind = 'movie' | 'series';
+export type CatalogPlaybackMode = 'native' | 'embed';
+
+export interface CatalogSourceRef {
+  providerId: string;
+  itemId: string;
+  mediaKind: CatalogMediaKind;
+  title: string;
+  playbackMode: CatalogPlaybackMode;
+  playerVariant: 'native';
+  poster?: string;
+  episodeId?: string;
+  episodeTitle?: string;
+  seasonNumber?: number;
+  episodeNumber?: number;
+}
+
+export interface CatalogEpisode {
+  id: string;
+  title: string;
+  seasonNumber: number;
+  episodeNumber: number;
+  duration: number;
+  uri: string;
+  poster: string;
+}
+
+export interface CatalogItem {
+  id: string;
+  providerId: string;
+  title: string;
+  mediaKind: CatalogMediaKind;
+  year: number;
+  genres: string[];
+  synopsis: string;
+  duration: number;
+  poster: string;
+  uri?: string;
+  episodes?: CatalogEpisode[];
+}
+
+export interface ProviderPlayerVariant {
+  value: string;
+  label: string;
+}
+
+export interface ProviderDefinition {
+  id: string;
+  name: string;
+  origin?: string;
+  embedOrigin?: string;
+  documentationUrl?: string;
+  playerVariants?: ProviderPlayerVariant[];
+  customUrl?: string;
+  customMovieUrlTemplate?: string;
+  customEpisodeUrlTemplate?: string;
+  verifiedAt?: string;
+  enabled: boolean;
+  status: 'active' | 'review-required';
+  playbackMode: CatalogPlaybackMode | 'unknown';
+  meshCompatible: boolean;
+  summary: string;
+  requirement: string;
+}
 
 export interface Vec2 {
   x: number;
@@ -29,8 +93,13 @@ export interface MediaSource {
   mime?: string;
   desktopId?: string;
   deviceId?: string;
+  providerCaptureId?: string;
+  providerUrl?: string;
+  providerKind?: ProviderCaptureKind;
+  providerName?: string;
   withAudio?: boolean;
   testPattern?: TestPatternKind;
+  catalog?: CatalogSourceRef;
   live: boolean;
   connected: boolean;
   detail?: string;
@@ -124,6 +193,41 @@ export interface WorkspaceOutputSize {
   height: number;
 }
 
+export type AmbientLightingStyle = 'edge' | 'average';
+
+export interface PresentAmbientSettings {
+  enabled: boolean;
+  style: AmbientLightingStyle;
+  intensity: number;
+  spread: number;
+  smoothing: number;
+}
+
+export interface DesktopWindowPlacement {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  displayId: string;
+}
+
+export interface PresentLayoutSnapshot {
+  players: Player[];
+  output: WorkspaceOutputSize;
+}
+
+export interface WorkspacePresentSettings {
+  layoutLocked: boolean;
+  lockedLayout: PresentLayoutSnapshot | null;
+  windowPlacement: DesktopWindowPlacement | null;
+  transparency: boolean;
+  ambient: PresentAmbientSettings;
+}
+
+export type WorkspacePresentSettingsInput = Omit<Partial<WorkspacePresentSettings>, 'ambient'> & {
+  ambient?: Partial<PresentAmbientSettings>;
+};
+
 export type RenderQuality = 'standard' | 'high' | 'ultra';
 
 export type TraceSourceMapping = 'crop' | 'whole';
@@ -200,6 +304,7 @@ export interface ProjectFile {
   quality?: RenderQuality;
   trace?: WorkspaceTraceSettings;
   planetarium?: WorkspacePlanetariumSettings;
+  present?: WorkspacePresentSettings;
 }
 
 export interface OpenedMedia {
@@ -216,6 +321,65 @@ export interface DesktopSourceInfo {
   thumbnail: string;
   appIcon?: string;
   displayId?: string;
+}
+
+export type ProviderCaptureKind = 'vidqueen' | 'builtin' | 'custom';
+
+export interface ProviderAdBlockSettings {
+  enabled: boolean;
+  rules: string[];
+}
+
+export interface ProviderCaptureWindowInfo {
+  id: string;
+  url: string;
+  label: string;
+  kind: ProviderCaptureKind;
+  adBlock?: ProviderAdBlockSettings;
+}
+
+export interface ProviderCaptureState {
+  id: string;
+  status: 'ready' | 'closed' | 'error';
+  detail?: string;
+}
+
+export interface CustomSourceVerification {
+  kind: 'media' | 'web-player';
+  originalUrl: string;
+  finalUrl: string;
+  finalOrigin: string;
+  status: number;
+  contentType: string;
+  mediaType: 'video' | 'audio' | 'unknown' | 'web-player';
+  cors: string | null;
+  warnings: string[];
+  checkedAt: string;
+}
+
+export interface RecordingState {
+  directory: string;
+  canceled?: boolean;
+}
+
+export interface RecordingStart {
+  id: string;
+  name: string;
+  path: string;
+  directory: string;
+}
+
+export interface RecordingInfo {
+  id?: string;
+  name: string;
+  path: string;
+  bytes: number;
+  modifiedAt?: string;
+}
+
+export interface RecordingList {
+  directory: string;
+  recordings: RecordingInfo[];
 }
 
 export interface SaveProjectResult {
@@ -237,7 +401,37 @@ export interface FreeformBridge {
   authorizeMedia(paths: string[]): Promise<Record<string, string>>;
   listDesktopSources(): Promise<DesktopSourceInfo[]>;
   prepareDesktopCapture(id: string, withAudio: boolean): Promise<void>;
+  openProviderCapture(input: {
+    url: string;
+    label: string;
+    kind?: ProviderCaptureKind;
+    providerId?: string;
+    providerName?: string;
+    verifiedUrl?: string;
+    adBlock?: ProviderAdBlockSettings;
+  }): Promise<ProviderCaptureWindowInfo>;
+  setProviderAdBlockSettings(settings: ProviderAdBlockSettings): Promise<ProviderAdBlockSettings>;
+  prepareProviderCapture(id: string, withAudio: boolean): Promise<void>;
+  closeProviderCapture(id: string): Promise<void>;
+  onProviderCaptureState(callback: (state: ProviderCaptureState) => void): () => void;
+  verifyCustomSource(input: { kind: 'media' | 'web-player'; url: string }): Promise<CustomSourceVerification>;
+  getRecordingState(): Promise<RecordingState>;
+  chooseRecordingDirectory(): Promise<RecordingState>;
+  startRecording(input: { label: string }): Promise<RecordingStart>;
+  appendRecording(id: string, chunk: ArrayBuffer): Promise<{ bytes: number }>;
+  finishRecording(id: string): Promise<RecordingInfo>;
+  discardRecording(id: string): Promise<{ discarded: boolean }>;
+  listRecordings(): Promise<RecordingList>;
+  openRecording(name: string): Promise<OpenedMedia>;
+  showRecordingFolder(): Promise<RecordingState>;
   saveProject(defaultName: string, content: string): Promise<SaveProjectResult>;
   openProject(): Promise<OpenProjectResult>;
   setFullscreen(value: boolean): Promise<void>;
+  getWindowPlacement(): Promise<DesktopWindowPlacement | null>;
+  setWindowPlacement(placement: DesktopWindowPlacement): Promise<DesktopWindowPlacement | null>;
+  setWindowLocked(value: boolean): Promise<void>;
+  setTransparency(value: boolean): Promise<void>;
+  beginWindowResize(direction: string, cursor: { x: number; y: number }): Promise<boolean>;
+  updateWindowResize(cursor: { x: number; y: number }): Promise<DesktopWindowPlacement | null>;
+  endWindowResize(): Promise<void>;
 }

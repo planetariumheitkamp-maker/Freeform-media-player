@@ -176,6 +176,29 @@ try {
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   checks.push('Players, dome settings, dome toggles, circular grid, and High quality survive reload.');
 
+  await page.getByRole('button', { name: 'Catalog', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Providers', exact: true })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Provider', exact: true })).toHaveValue('vidqueen');
+  await expect(page.locator('.catalog-card, .provider-row, .catalog-shell iframe')).toHaveCount(0);
+  await page.getByLabel('TMDB ID', { exact: true }).fill('603');
+  await page.getByLabel(/I confirm I am authorized/).check();
+  const providerWindowEvent = electronApp.waitForEvent('window', { timeout: 30_000 });
+  await page.getByRole('button', { name: 'Open player window', exact: true }).click();
+  const providerPage = await providerWindowEvent;
+  await providerPage.route('https://vidqueen.st/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><body style="background:#101311;color:#c5ffc3"><strong>PACKAGED MOCK PROVIDER</strong></body></html>',
+    });
+  });
+  await providerPage.reload();
+  await expect(providerPage).toHaveURL('https://vidqueen.st/embed/movie/603?autoplay=false');
+  await expect(providerPage.getByText('PACKAGED MOCK PROVIDER')).toBeVisible();
+  await providerPage.close();
+  await page.getByRole('button', { name: 'Close Catalog', exact: true }).click();
+  checks.push('The provider-only Catalog opens an authorized Vidqueen TMDB movie in a mocked dedicated window in the packaged app.');
+
   await page.locator('.warp-workspace').screenshot({
     path: path.join(outputDirectory, 'desktop-planetarium.png'),
   });

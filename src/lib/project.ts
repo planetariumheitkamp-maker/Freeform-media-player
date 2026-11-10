@@ -1,4 +1,5 @@
 import { TEST_SOURCE } from '../data/defaults';
+import { isCatalogSourceRef } from './catalog';
 import { DEFAULT_BACKGROUND_COLOR, isBackgroundColor, isPlayerVisual, normalizeBackgroundColor, normalizePlayerVisual } from './appearance';
 import { DEFAULT_GRID_GEOMETRY, normalizeGridGeometry } from './grid';
 import { DEFAULT_OUTPUT_SIZE, normalizeOutputOpacity, normalizeOutputSize } from './output';
@@ -7,7 +8,8 @@ import { DEFAULT_PLANETARIUM_SETTINGS, normalizePlanetariumSettings } from './do
 import { normalizeGroups } from './groups';
 import { DEFAULT_TRACE_SETTINGS, normalizeTraceSettings } from './traceSettings';
 import { isPlayerLiveEnhancement, normalizePlayerLiveEnhancement } from './liveEnhancement';
-import type { LinkGroup, MediaSource, Player, ProjectFile, RenderQuality, WorkspaceBackground, WorkspaceGridGeometryInput, WorkspaceOutputSize, WorkspacePlanetariumSettingsInput, WorkspaceTraceSettingsInput } from '../types';
+import { DEFAULT_PRESENT_SETTINGS, normalizePresentSettings } from './present';
+import type { LinkGroup, MediaSource, Player, ProjectFile, RenderQuality, WorkspaceBackground, WorkspaceGridGeometryInput, WorkspaceOutputSize, WorkspacePlanetariumSettingsInput, WorkspacePresentSettingsInput, WorkspaceTraceSettingsInput } from '../types';
 
 interface ProjectState {
   projectName: string;
@@ -23,6 +25,7 @@ interface ProjectState {
   renderQuality?: RenderQuality;
   traceSettings?: WorkspaceTraceSettingsInput;
   planetariumSettings?: WorkspacePlanetariumSettingsInput;
+  presentSettings?: WorkspacePresentSettingsInput;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -41,12 +44,17 @@ function isSource(value: unknown): value is MediaSource {
   if (!isRecord(value)) return false;
   return typeof value.id === 'string'
     && typeof value.name === 'string'
-    && ['test', 'file', 'stream', 'desktop', 'device'].includes(String(value.kind))
+    && ['test', 'file', 'stream', 'catalog', 'desktop', 'device', 'provider'].includes(String(value.kind))
     && ['video', 'audio', 'image', 'capture', 'test'].includes(String(value.mediaType))
     && typeof value.live === 'boolean'
     && typeof value.connected === 'boolean'
     && (value.uri === undefined || typeof value.uri === 'string')
-    && (value.path === undefined || typeof value.path === 'string');
+    && (value.path === undefined || typeof value.path === 'string')
+    && (value.providerCaptureId === undefined || typeof value.providerCaptureId === 'string')
+    && (value.providerUrl === undefined || typeof value.providerUrl === 'string')
+    && (value.providerKind === undefined || value.providerKind === 'vidqueen' || value.providerKind === 'builtin' || value.providerKind === 'custom')
+    && (value.providerName === undefined || typeof value.providerName === 'string')
+    && (value.catalog === undefined || isCatalogSourceRef(value.catalog));
 }
 
 function isBackground(value: unknown): value is WorkspaceBackground {
@@ -133,6 +141,27 @@ function isPlayer(value: unknown): value is Player {
     && isFiniteNumber(node.v));
 }
 
+function isPresentSettings(value: unknown): value is WorkspacePresentSettingsInput {
+  if (!isRecord(value)) return false;
+  const ambient = value.ambient;
+  const placement = value.windowPlacement;
+  const layout = value.lockedLayout;
+  return (value.layoutLocked === undefined || typeof value.layoutLocked === 'boolean')
+    && (value.transparency === undefined || typeof value.transparency === 'boolean')
+    && (ambient === undefined || (isRecord(ambient)
+      && (ambient.enabled === undefined || typeof ambient.enabled === 'boolean')
+      && (ambient.style === undefined || ambient.style === 'edge' || ambient.style === 'average')
+      && ['intensity', 'spread', 'smoothing'].every((field) => ambient[field] === undefined || isFiniteNumber(ambient[field]))))
+    && (placement == null || (isRecord(placement)
+      && ['x', 'y', 'width', 'height'].every((field) => isFiniteNumber(placement[field]))
+      && typeof placement.displayId === 'string'))
+    && (layout == null || (isRecord(layout)
+      && Array.isArray(layout.players)
+      && layout.players.length <= 200
+      && layout.players.every(isPlayer)
+      && isOutputSize(layout.output)));
+}
+
 function isGroup(value: unknown): value is LinkGroup {
   return isRecord(value)
     && typeof value.id === 'string'
@@ -187,6 +216,9 @@ export function parseProject(content: string): ProjectFile {
   if (value.planetarium != null && !isPlanetariumSettings(value.planetarium)) {
     throw new Error('The workspace contains invalid planetarium settings.');
   }
+  if (value.present != null && !isPresentSettings(value.present)) {
+    throw new Error('The workspace contains invalid Present settings.');
+  }
 
   const sourceIds = new Set(value.sources.map((source) => source.id));
   const players = value.players.map((player) => ({
@@ -222,6 +254,7 @@ export function parseProject(content: string): ProjectFile {
     quality: normalizeRenderQuality(value.quality),
     trace: normalizeTraceSettings(isTraceSettings(value.trace) ? value.trace : DEFAULT_TRACE_SETTINGS),
     planetarium: normalizePlanetariumSettings(isPlanetariumSettings(value.planetarium) ? value.planetarium : DEFAULT_PLANETARIUM_SETTINGS),
+    present: normalizePresentSettings(isPresentSettings(value.present) ? value.present : DEFAULT_PRESENT_SETTINGS),
   };
 }
 
@@ -234,6 +267,14 @@ export function serializeProject(state: ProjectState): string {
     sources: state.sources.map((source) => {
       if (source.kind === 'file' && source.uri?.startsWith('data:')) return { ...source, connected: true };
       if (source.kind === 'file') return { ...source, uri: undefined, connected: false };
+      if (source.kind === 'provider') return {
+        ...source,
+        providerCaptureId: undefined,
+        connected: false,
+        detail: source.providerKind === 'custom'
+          ? 'Reopen and verify the custom player from Sources → Custom to reconnect this live source.'
+          : `Reopen the authorized ${source.providerName || 'provider'} window from Catalog to reconnect this live source.`,
+      };
       if (source.live) return { ...source, connected: false };
       return source;
     }),
@@ -251,6 +292,7 @@ export function serializeProject(state: ProjectState): string {
     quality: normalizeRenderQuality(state.renderQuality),
     trace: normalizeTraceSettings(state.traceSettings ?? DEFAULT_TRACE_SETTINGS),
     planetarium: normalizePlanetariumSettings(state.planetariumSettings ?? DEFAULT_PLANETARIUM_SETTINGS),
+    present: normalizePresentSettings(state.presentSettings ?? DEFAULT_PRESENT_SETTINGS),
   };
   return JSON.stringify(project, null, 2);
 }

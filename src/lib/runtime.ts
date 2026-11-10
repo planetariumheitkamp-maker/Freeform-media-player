@@ -5,6 +5,7 @@ import type {
   OpenProjectResult,
   SaveProjectResult,
 } from '../types';
+import { verifyCustomSourceInBrowser } from './customSource';
 
 function fileMediaType(file: File): OpenedMedia['mediaType'] {
   if (file.type.startsWith('audio/')) return 'audio';
@@ -64,6 +65,49 @@ const browserBridge: FreeformBridge = {
   async prepareDesktopCapture() {
     // Browser capture uses the operating system picker directly.
   },
+  async openProviderCapture() {
+    throw new Error('Visible provider capture requires the Freeform desktop app.');
+  },
+  async setProviderAdBlockSettings() {
+    throw new Error('Provider-window request blocking requires the Freeform desktop app.');
+  },
+  async prepareProviderCapture() {
+    throw new Error('Visible provider capture requires the Freeform desktop app.');
+  },
+  async closeProviderCapture() {
+    // There is no provider window to close in the browser preview.
+  },
+  onProviderCaptureState() {
+    return () => {};
+  },
+  verifyCustomSource: verifyCustomSourceInBrowser,
+  async getRecordingState() {
+    return { directory: 'Available only in the Freeform desktop app' };
+  },
+  async chooseRecordingDirectory() {
+    throw new Error('Choose a recording folder in the Freeform desktop app.');
+  },
+  async startRecording() {
+    throw new Error('Sandbox recording requires the Freeform desktop app.');
+  },
+  async appendRecording() {
+    throw new Error('Sandbox recording requires the Freeform desktop app.');
+  },
+  async finishRecording() {
+    throw new Error('Sandbox recording requires the Freeform desktop app.');
+  },
+  async discardRecording() {
+    return { discarded: false };
+  },
+  async listRecordings() {
+    return { directory: '', recordings: [] };
+  },
+  async openRecording() {
+    throw new Error('Open saved recordings in the Freeform desktop app.');
+  },
+  async showRecordingFolder() {
+    throw new Error('Open the recording folder in the Freeform desktop app.');
+  },
   async saveProject(defaultName: string, content: string): Promise<SaveProjectResult> {
     const blob = new Blob([content], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -86,21 +130,53 @@ const browserBridge: FreeformBridge = {
       await document.exitFullscreen();
     }
   },
+  async getWindowPlacement() {
+    return null;
+  },
+  async setWindowPlacement() {
+    return null;
+  },
+  async setWindowLocked() {
+    // Browser previews do not control an operating-system window.
+  },
+  async setTransparency() {
+    throw new Error('True desktop transparency requires the Freeform Windows app.');
+  },
+  async beginWindowResize() {
+    return false;
+  },
+  async updateWindowResize() {
+    return null;
+  },
+  async endWindowResize() {
+    // Browser previews use their ordinary operating-system window controls.
+  },
 };
 
 export const runtime: FreeformBridge = window.freeform ?? browserBridge;
 
-export async function captureDesktop(sourceId: string, withAudio: boolean): Promise<MediaStream> {
+async function captureDisplay(prepare: () => Promise<void>, withAudio: boolean): Promise<MediaStream> {
   if (!navigator.mediaDevices?.getDisplayMedia) {
-    throw new Error('Desktop capture is not available in this runtime.');
+    throw new Error('Display capture is not available in this runtime.');
   }
-  await runtime.prepareDesktopCapture(sourceId, withAudio);
+  await prepare();
   return navigator.mediaDevices.getDisplayMedia({
     video: {
       frameRate: { ideal: 60, max: 60 },
     },
     audio: withAudio,
   });
+}
+
+export function captureDesktop(sourceId: string, withAudio: boolean): Promise<MediaStream> {
+  return captureDisplay(() => runtime.prepareDesktopCapture(sourceId, withAudio), withAudio);
+}
+
+export function captureProvider(captureId: string, withAudio: boolean): Promise<MediaStream> {
+  if (!captureId) {
+    return Promise.reject(new Error('Reopen the authorized Vidqueen window from Catalog or the verified custom-player window before reconnecting.'));
+  }
+  return captureDisplay(() => runtime.prepareProviderCapture(captureId, withAudio), withAudio);
 }
 
 export async function listCaptureDevices(requestPermission = false): Promise<MediaDeviceInfo[]> {

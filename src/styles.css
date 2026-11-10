@@ -234,8 +234,72 @@ input[type='range']::-moz-range-thumb { width: 9px; height: 9px; border: 1px sol
 .viewport-zoom .icon-button { width: 26px; height: 26px; }
 .zoom-value { width: 43px; height: 25px; padding: 0; background: transparent; color: #b6bcb6; font-family: 'Fira Mono', monospace; font-size: 8px; }
 .zoom-value:hover { color: var(--mint); }
-.exit-presentation { position: fixed; top: 14px; right: 14px; z-index: 20; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border: 1px solid rgba(197, 255, 195, .35); border-radius: 3px; background: rgba(31, 33, 31, .88); color: var(--mint); font-size: 10px; opacity: .35; transition: opacity .15s; }
-.exit-presentation:hover { opacity: 1; }
+.present-transparent-native, .present-transparent-native body, .present-transparent-native #root { background: transparent !important; }
+.app-shell.is-present-transparent, .is-present-transparent .workspace-column, .is-present-transparent .warp-workspace { background: transparent !important; }
+.is-presenting .viewport-status, .is-presenting .empty-workspace { display: none; }
+.present-controls { position: fixed; z-index: 80; width: calc(100vw - 24px); max-width: calc(100vw - 24px); display: flex; flex-direction: column; align-items: flex-start; pointer-events: none; }
+.present-controls-reveal { height: 30px; display: flex; align-items: center; gap: 7px; padding: 0 10px; border: 1px solid rgba(241, 242, 242, .18); border-radius: 3px; background: rgba(31, 27, 31, .86); color: #f1f2f2; font-size: 10px; opacity: .5; transition: opacity .16s ease, background-color .16s ease; pointer-events: auto; }
+.present-controls-reveal:hover, .present-controls-reveal:focus-visible, .present-controls.is-open .present-controls-reveal { background: #211f21; opacity: 1; }
+.present-controls-reveal kbd { margin-left: 3px; }
+.present-control-panel { position: relative; width: 100%; min-height: 0; margin-top: 6px; display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(241, 242, 242, .18); border-radius: 4px; background: #211f21; color: #f1f2f2; box-shadow: 0 12px 36px rgba(0, 0, 0, .34); pointer-events: auto; }
+.present-control-panel.is-custom-sized .present-settings-view { flex: 1 1 auto; }
+.present-control-panel.is-custom-sized .present-source-browser { flex: 1 1 auto; height: auto; min-height: 0; max-height: none; }
+.present-resize-handle { position: absolute; right: 1px; bottom: 1px; z-index: 4; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 2px; background: transparent; color: #827d81; cursor: nwse-resize; touch-action: none; }
+.present-resize-handle svg { position: absolute; right: 3px; bottom: 3px; }
+.present-resize-handle:hover { background: rgba(241, 242, 242, .06); color: var(--mint); }
+.present-resize-handle:focus-visible { outline: 1px solid var(--mint); outline-offset: -3px; color: var(--mint); }
+.present-control-heading { min-height: 35px; display: flex; flex: 0 0 35px; align-items: center; justify-content: space-between; padding: 0 5px 0 12px; border-bottom: 1px solid rgba(241, 242, 242, .12); cursor: grab; touch-action: none; user-select: none; }
+.present-control-heading:active { cursor: grabbing; }
+.present-control-heading > span { display: flex; align-items: center; gap: 7px; color: #b1afb2; font-family: 'Fira Mono', monospace; font-size: 8px; letter-spacing: 1px; }
+.present-control-heading i { width: 5px; height: 5px; display: block; background: var(--mint); }
+.present-window-actions { display: flex; align-items: center; gap: 2px; }
+.present-control-heading .icon-button { width: 27px; height: 27px; color: #b1afb2; }
+.present-control-heading .icon-button[aria-pressed='true'] { color: var(--mint); background: rgba(197, 255, 195, .08); }
+.present-panel-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); flex: 0 0 40px; gap: 4px; padding: 5px; border-bottom: 1px solid rgba(241, 242, 242, .12); }
+.present-panel-tabs button { min-width: 0; display: flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid transparent; border-radius: 2px; background: transparent; color: #b1afb2; font-size: 10px; transition: background-color .14s ease, color .14s ease; }
+.present-panel-tabs button:hover { color: #f1f2f2; background: rgba(241, 242, 242, .06); }
+.present-panel-tabs button.is-active { border-color: rgba(197, 255, 195, .18); background: rgba(197, 255, 195, .08); color: var(--mint); }
+.present-settings-view { min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #555055 transparent; }
+.present-primary-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.present-toggle { min-width: 0; min-height: 62px; display: flex; align-items: center; gap: 9px; padding: 9px 11px; border-bottom: 1px solid rgba(241, 242, 242, .1); background: transparent; color: #f1f2f2; text-align: left; transition: background-color .16s ease; }
+.present-toggle:nth-child(odd) { border-right: 1px solid rgba(241, 242, 242, .1); }
+.present-toggle:hover:not(:disabled), .present-toggle.is-active { background: rgba(241, 242, 242, .06); }
+.present-toggle.is-active > svg { color: var(--mint); }
+.present-toggle > svg { flex: 0 0 auto; color: #b1afb2; }
+.present-toggle > span { min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 10px; line-height: 1.3; }
+.present-toggle small { color: #b1afb2; font-family: 'Fira Mono', monospace; font-size: 8px; }
+.present-exit { min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 7px; background: transparent; color: #f1f2f2; font-size: 10px; transition: background-color .14s ease; }
+.present-exit:hover { background: rgba(241, 242, 242, .07); }
+.present-exit kbd { padding: 1px 3px; }
+.ambient-controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: 15px; padding: 13px 14px 15px; border-bottom: 1px solid rgba(241, 242, 242, .12); }
+.ambient-style { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid rgba(241, 242, 242, .16); }
+.ambient-style button { min-height: 31px; padding: 0 8px; background: transparent; color: #b1afb2; font-size: 9px; }
+.ambient-style button + button { border-left: 1px solid rgba(241, 242, 242, .16); }
+.ambient-style button.is-active { background: var(--mint); color: #1f1b1f; }
+.ambient-range { min-width: 0; display: block; }
+.ambient-range > span { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; color: #b1afb2; font-size: 10px; }
+.ambient-range output { color: #f1f2f2; font-family: 'Fira Mono', monospace; font-size: 8px; }
+.ambient-range input[type='range'] { display: block; }
+.present-control-status { padding: 10px 34px 10px 13px; color: #b1afb2; font-size: 10px; line-height: 1.55; }
+.present-source-browser { height: calc(100dvh - 116px); min-height: 260px; max-height: 620px; overflow: hidden; }
+.present-source-browser .source-rail { height: 100%; background: transparent; border-right: 0; }
+.present-source-browser.is-players .sources-section, .present-source-browser.is-media .players-section { display: none; }
+.present-source-browser .rail-section { flex: 1; border-top: 0; }
+.present-source-browser .section-heading { height: 40px; flex-basis: 40px; padding-left: 13px; }
+.present-source-browser .source-row { min-height: 50px; }
+.present-source-browser .source-copy small, .present-source-browser .player-copy small { color: #aaa6aa; font-size: 8px; }
+.present-source-browser .source-row.is-assigned, .present-source-browser .player-row.is-active { background: rgba(197, 255, 195, .075); }
+.present-source-browser .player-list { padding-bottom: 6px; }
+.present-source-browser .player-actions { padding-bottom: 8px; }
+.present-source-browser .rail-note { flex: 0 0 auto; color: #aaa6aa; font-size: 9px; }
+.present-source-browser .icon-button:focus-visible, .present-source-browser .source-row:focus-within, .present-source-browser .player-row:focus-within { outline-color: var(--mint); }
+@media (max-width: 480px) {
+  .present-toggle { padding: 8px; gap: 6px; }
+  .present-toggle > span { font-size: 9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .present-controls-reveal, .present-toggle, .present-exit, .present-panel-tabs button { transition: none; }
+}
 kbd { padding: 2px 4px; border: 1px solid #555c56; border-radius: 2px; color: #aab0aa; font-family: 'Fira Mono', monospace; font-size: 7px; }
 
 .transport-bar { height: 73px; flex: 0 0 73px; display: flex; align-items: center; gap: 15px; padding: 0 13px; background: #222422; border-top: 1px solid var(--line); }
@@ -518,6 +582,19 @@ button.history-entry:hover { background: rgba(197, 255, 195, .04); color: var(--
   .feature-guide-category button, .guide-progress span { transition: none; }
 }
 
+.window-resize-handle { position: fixed; z-index: 300; margin: 0; padding: 0; border: 0; background: transparent; touch-action: none; }
+.window-resize-n, .window-resize-s { left: 9px; right: 9px; height: 7px; cursor: ns-resize; }
+.window-resize-n { top: 0; }
+.window-resize-s { bottom: 0; }
+.window-resize-e, .window-resize-w { top: 9px; bottom: 9px; width: 7px; cursor: ew-resize; }
+.window-resize-e { right: 0; }
+.window-resize-w { left: 0; }
+.window-resize-ne, .window-resize-nw, .window-resize-se, .window-resize-sw { width: 16px; height: 16px; }
+.window-resize-ne { top: 0; right: 0; cursor: nesw-resize; }
+.window-resize-nw { top: 0; left: 0; cursor: nwse-resize; }
+.window-resize-se { right: 0; bottom: 0; cursor: nwse-resize; }
+.window-resize-sw { bottom: 0; left: 0; cursor: nesw-resize; }
+
 @media (max-width: 1250px) {
   .app-body { --left-panel-width: 232px; --right-panel-width: 264px; }
   .app-body.left-panel-minimized { --left-panel-width: 0px; }
@@ -531,7 +608,7 @@ button.history-entry:hover { background: rgba(197, 255, 195, .04); color: var(--
   .trace-tool span, .trace-settings-tool span { display: none; }
 }
 
-@media (max-width: 1050px) {
+@media (max-width: 1100px) {
   .app-body { --left-panel-width: 214px; --right-panel-width: 242px; }
   .app-body.left-panel-minimized { --left-panel-width: 0px; }
   .app-body.right-panel-minimized { --right-panel-width: 0px; }

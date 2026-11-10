@@ -13,8 +13,10 @@ export function formatTime(seconds: number | undefined): string {
 export function sourceTypeLabel(kind: string): string {
   switch (kind) {
     case 'desktop': return 'LIVE CAPTURE';
+    case 'provider': return 'PROVIDER CAPTURE';
     case 'device': return 'DEVICE';
     case 'stream': return 'NETWORK';
+    case 'catalog': return 'CATALOG';
     case 'file': return 'LOCAL FILE';
     default: return 'TEST PATTERN';
   }

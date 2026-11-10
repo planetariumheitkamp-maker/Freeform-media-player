@@ -1,0 +1,439 @@
+.source-utility-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 5px;
+  padding: 0 8px 6px;
+}
+
+.source-utility-actions .button {
+  min-width: 0;
+  min-height: 31px;
+  padding: 0 6px;
+  color: #b8c3b9;
+  font-size: 8.5px;
+  white-space: normal;
+}
+
+.source-utility-actions .button:hover:not(:disabled) {
+  border-color: #607663;
+  color: var(--mint);
+}
+
+.custom-source-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.custom-source-kind {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.custom-source-kind button {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #485149;
+  border-radius: 3px;
+  background: #1d211e;
+  color: #a4b0a6;
+  font-size: 11px;
+  transition: border-color .14s, background .14s, color .14s;
+}
+
+.custom-source-kind button:hover {
+  border-color: #738276;
+  color: #e5ece4;
+}
+
+.custom-source-kind button.active {
+  border-color: #76947a;
+  background: rgba(197, 255, 195, .065);
+  color: var(--mint);
+}
+
+.custom-source-dialog > .field-label {
+  margin: 0;
+}
+
+.custom-source-dialog > .form-help {
+  margin: -5px 0 0;
+}
+
+.custom-verify-button,
+.custom-add-button {
+  min-height: 38px;
+}
+
+.custom-verification-result {
+  padding: 13px 14px;
+  border: 1px solid #506653;
+  border-radius: 3px;
+  background: rgba(197, 255, 195, .035);
+}
+
+.custom-verification-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--mint);
+}
+
+.custom-verification-title strong {
+  flex: 1;
+  color: #d4e5d4;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.custom-verification-title > span {
+  color: #a8baa9;
+  font: 8px 'Fira Mono', monospace;
+}
+
+.custom-verification-result dl {
+  display: grid;
+  gap: 7px;
+  margin: 13px 0 0;
+}
+
+.custom-verification-result dl > div {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.custom-verification-result dt {
+  color: #859387;
+  font-size: 9px;
+}
+
+.custom-verification-result dd {
+  margin: 0;
+  color: #bfcbbf;
+  font: 9px 'Fira Mono', monospace;
+  overflow-wrap: anywhere;
+}
+
+.custom-verification-warning {
+  margin: 11px 0 0;
+  padding-top: 9px;
+  border-top: 1px solid #465347;
+  color: #c2b08d;
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+.custom-preview-section {
+  min-width: 0;
+}
+
+.custom-preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.custom-preview-heading > span {
+  flex: 0 0 auto;
+  color: #8d9c90;
+  font: 8px 'Fira Mono', monospace;
+  letter-spacing: 1px;
+}
+
+.custom-preview-heading > strong {
+  color: #a4b2a6;
+  font-size: 9px;
+  font-weight: 400;
+  text-align: right;
+}
+
+.custom-preview-frame {
+  position: relative;
+  height: 270px;
+  overflow: hidden;
+  border: 1px solid #48534a;
+  border-radius: 2px;
+  background: #0e120f;
+}
+
+.custom-preview-frame iframe,
+.custom-preview-frame video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border: 0;
+  object-fit: contain;
+  background: #0e120f;
+}
+
+.custom-confirmation {
+  margin-bottom: 0;
+}
+
+.custom-capture-section {
+  margin-top: 0;
+}
+
+.sandbox-recorder {
+  margin: 6px 0;
+  padding: 12px 0;
+  border-top: 1px solid #3c4b3f;
+  border-bottom: 1px solid #3c4b3f;
+}
+
+.sandbox-recorder-heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #b5c6b7;
+}
+
+.sandbox-recorder-heading strong {
+  flex: 1;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.sandbox-recorder-heading > span {
+  color: #93aa97;
+  font: 7px 'Fira Mono', monospace;
+  letter-spacing: .65px;
+}
+
+.sandbox-recorder:has(.button.danger) .sandbox-recorder-heading {
+  color: #f09b91;
+}
+
+.sandbox-recorder > p {
+  margin: 9px 0;
+  color: #98a99b;
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+.sandbox-recorder > small[role="status"] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0;
+  line-height: 1.5;
+}
+
+.sandbox-recorder > .recording-audio-connected {
+  color: var(--mint);
+}
+
+.recording-directory,
+.recording-library-directory {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 8px;
+  background: rgba(12, 17, 13, .35);
+}
+
+.recording-directory > span,
+.recording-library-directory > span {
+  color: #748b79;
+  font: 7px 'Fira Mono', monospace;
+  letter-spacing: .8px;
+}
+
+.recording-directory code,
+.recording-library-directory code,
+.recording-saved code {
+  display: block;
+  color: #b0c3b3;
+  font: 8px 'Fira Mono', monospace;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.sandbox-recorder-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.recording-saved {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 9px;
+  border-left: 2px solid var(--mint);
+  background: rgba(197, 255, 195, .035);
+  color: var(--mint);
+}
+
+.recording-saved > div {
+  min-width: 0;
+}
+
+.recording-saved strong,
+.recording-saved span {
+  display: block;
+}
+
+.recording-saved strong {
+  margin-bottom: 6px;
+  color: #d0e4d1;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.recording-saved span {
+  margin-top: 6px;
+  color: #9cad9f;
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.recording-library-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+.recording-library-toolbar .icon-button {
+  margin-left: auto;
+  border-color: var(--line);
+}
+
+.recording-library-directory {
+  margin-bottom: 16px;
+}
+
+.recording-library-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 13px 0 17px;
+}
+
+.recording-library-row {
+  display: grid;
+  grid-template-columns: 25px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #424c44;
+  border-radius: 3px;
+  background: #202521;
+  color: #93a397;
+}
+
+.recording-library-row > div {
+  min-width: 0;
+}
+
+.recording-library-row strong,
+.recording-library-row span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recording-library-row strong {
+  color: #d1ded3;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.recording-library-row span {
+  margin-top: 5px;
+  color: #8a9a8e;
+  font: 8px 'Fira Mono', monospace;
+}
+
+.recording-library-row .button {
+  font-size: 9px;
+}
+
+.recording-library-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 35px 20px;
+  border: 1px dashed #465048;
+  color: #7d9182;
+  text-align: center;
+}
+
+.recording-library-empty strong {
+  margin-top: 12px;
+  color: #bacabc;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.recording-library-empty p {
+  max-width: 360px;
+  margin: 8px 0 0;
+  color: #8d9f91;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.custom-source-dialog button:focus-visible,
+.recording-library-list button:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 2px;
+}
+
+.custom-source-dialog button:disabled,
+.recording-library-toolbar button:disabled,
+.recording-library-list button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 650px) {
+  .custom-source-kind,
+  .sandbox-recorder-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .custom-preview-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .custom-preview-heading > strong {
+    text-align: left;
+  }
+
+  .custom-preview-frame {
+    height: 230px;
+  }
+
+  .recording-library-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .recording-library-row {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+
+  .recording-library-row .button {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .custom-source-kind button {
+    transition: none;
+  }
+}

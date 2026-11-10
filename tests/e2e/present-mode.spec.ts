@@ -35,7 +35,7 @@ async function settleRender(page: Page) {
 
 async function enterPresent(page: Page) {
   await page.getByRole('button', { name: 'Present', exact: true }).click();
-  await expect(page.getByRole('button', { name: /Exit presentation/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Present controls', exact: true })).toBeVisible();
   await expect(page.locator('.presentation-hint')).toContainText('DRAG A PLAYER TO REPOSITION · ESC EXITS');
   await expect(page.locator('.node-hit')).toHaveCount(0);
   await expect(page.locator('.viewport-zoom')).toHaveCount(0);
@@ -125,7 +125,7 @@ test('locked players do not move when dragged in Present mode', async ({ page })
   expect(after.players[0].position).toEqual(before.players[0].position);
   expect(after.players[0].locked).toBe(true);
 
-  await page.getByRole('button', { name: /Exit presentation/ }).click();
+  await page.keyboard.press('Escape');
   await expect(page.getByTitle('Unlock geometry', { exact: true })).toBeVisible();
   assertNoRuntimeErrors();
 });

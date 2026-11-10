@@ -1,23 +1,24 @@
-import { BookOpen, FolderOpen, History, Library, Package, PanelTopClose, Play, Redo2, Save, ShieldCheck, Undo2 } from 'lucide-react';
+import { BookOpen, Clapperboard, FolderOpen, History, Library, Package, PanelTopClose, Play, Redo2, Save, ShieldCheck, Undo2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { OPEN_PROVIDER_DASHBOARD_EVENT } from '../lib/customProviders';
 import { useGuideTarget } from '../lib/guideActions';
 import { createPortableProject, parseProject, reauthorizeProjectBackground, reauthorizeProjectFiles, serializeProject } from '../lib/project';
 import { runtime } from '../lib/runtime';
 import { useWorkspace } from '../store/useWorkspace';
 import type { ProjectFile } from '../types';
+import { CatalogDialog } from './CatalogDialog';
 import { FeatureGuideDialog } from './FeatureGuideDialog';
 import { useMedia } from './MediaContext';
 import { HistoryDialog } from './HistoryDialog';
 import { RecoveryDialog } from './RecoveryDialog';
 import { SavedWorkspacesDialog } from './SavedWorkspacesDialog';
 
-export function TopBar({ onMinimizeAll }: { onMinimizeAll: () => void }) {
+export function TopBar({ onMinimizeAll, onPresent }: { onMinimizeAll: () => void; onPresent: () => void }) {
   const projectName = useWorkspace((state) => state.projectName);
   const setProjectName = useWorkspace((state) => state.setProjectName);
   const loadProject = useWorkspace((state) => state.loadProject);
   const updateSource = useWorkspace((state) => state.updateSource);
   const setBackground = useWorkspace((state) => state.setBackground);
-  const setPresentation = useWorkspace((state) => state.setPresentation);
   const canUndo = useWorkspace((state) => state.canUndo);
   const canRedo = useWorkspace((state) => state.canRedo);
   const pushToast = useWorkspace((state) => state.pushToast);
@@ -25,7 +26,20 @@ export function TopBar({ onMinimizeAll }: { onMinimizeAll: () => void }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [requestedProviderId, setRequestedProviderId] = useState<string | null>(null);
   const { stopStream } = useMedia();
+
+  useEffect(() => {
+    const openProvider = (event: Event) => {
+      const providerId = (event as CustomEvent<{ providerId?: unknown }>).detail?.providerId;
+      if (typeof providerId !== 'string') return;
+      setRequestedProviderId(providerId);
+      setCatalogOpen(true);
+    };
+    window.addEventListener(OPEN_PROVIDER_DASHBOARD_EVENT, openProvider);
+    return () => window.removeEventListener(OPEN_PROVIDER_DASHBOARD_EVENT, openProvider);
+  }, []);
 
   const restoreProject = useCallback(async (project: ProjectFile, title: string) => {
     useWorkspace.getState().sources.filter((source) => source.live).forEach((source) => stopStream(source.id));
@@ -103,16 +117,7 @@ export function TopBar({ onMinimizeAll }: { onMinimizeAll: () => void }) {
     return () => window.removeEventListener('keydown', handleKey);
   }, [openFromFile, saveToFile]);
 
-  const present = async () => {
-    setPresentation(true);
-    try {
-      await runtime.setFullscreen(true);
-    } catch {
-      pushToast({ title: 'Presentation is windowed', detail: 'The operating system did not grant fullscreen.', tone: 'info' });
-    }
-  };
-
-  useGuideTarget('present', () => { void present(); });
+  useGuideTarget('present', onPresent);
   useGuideTarget('saves', () => setSavedWorkspacesOpen(true));
   useGuideTarget('history', () => setHistoryOpen(true));
   useGuideTarget('recovery', () => setRecoveryOpen(true));
@@ -134,15 +139,17 @@ export function TopBar({ onMinimizeAll }: { onMinimizeAll: () => void }) {
           <button className="icon-button" aria-label="Redo" title="Redo (Ctrl+Y)" disabled={!canRedo} onClick={() => useWorkspace.getState().redo()}><Redo2 size={15} /></button>
           <button data-guide-target="history" className="icon-button" aria-label="Edit history" title="Edit history" onClick={() => setHistoryOpen(true)}><History size={15} /></button>
           <button data-guide-target="recovery" className="icon-button" aria-label="Recovery and diagnostics" title="Recovery & diagnostics" onClick={() => setRecoveryOpen(true)}><ShieldCheck size={15} /></button>
+          <button className="button subtle catalog-top-button" aria-label="Catalog" title="Choose an external media provider" onClick={() => { setRequestedProviderId(null); setCatalogOpen(true); }}><Clapperboard size={14} /><span>Catalog</span></button>
           <button data-guide-target="saves" className="button subtle" onClick={() => setSavedWorkspacesOpen(true)}><Library size={14} />Saves</button>
           <button className="button subtle" onClick={() => void openFromFile()}><FolderOpen size={14} />Open</button>
           <button className="button subtle" onClick={() => void saveToFile()}><Save size={14} />Save file</button>
           <button className="button subtle" title="Export a workspace with connected local media embedded" onClick={() => void savePortable()}><Package size={14} />Portable</button>
           <button className="button subtle" title="Open the interactive feature guide" onClick={() => setGuideOpen(true)}><BookOpen size={14} />Guide</button>
           <button className="icon-button" aria-label="Hide all control panels" title="Hide all control panels (Shift+F)" onClick={onMinimizeAll}><PanelTopClose size={15} /></button>
-          <button data-guide-target="present" className="button primary" onClick={() => void present()}><Play size={14} />Present</button>
+          <button data-guide-target="present" className="button primary" onClick={onPresent}><Play size={14} />Present</button>
         </div>
       </header>
+      {catalogOpen && <CatalogDialog initialProviderId={requestedProviderId} onClose={() => { setRequestedProviderId(null); setCatalogOpen(false); }} />}
       {guideOpen && <FeatureGuideDialog onClose={() => setGuideOpen(false)} />}
       {historyOpen && <HistoryDialog onClose={() => setHistoryOpen(false)} />}
       {recoveryOpen && <RecoveryDialog onClose={() => setRecoveryOpen(false)} onRestore={restoreProject} />}

@@ -60,7 +60,7 @@ function useMediaSource(
     if (!element || !uri || !source.connected) return;
     let disposed = false;
     let hls: Hls | null = null;
-    const isHls = /\.m3u8(?:$|[?#])/i.test(uri);
+    const isHls = /mpegurl/i.test(source.mime ?? '') || /\.m3u8(?:$|[?#])/i.test(uri);
 
     const fail = (detail: string) => {
       if (disposed) return;
@@ -473,6 +473,9 @@ function AudioSurface({ player, source }: { player: Player; source: MediaSource 
 
 function PlayerMedia({ player, source }: { player: Player; source: MediaSource }) {
   const { getStream } = useMedia();
+  if (source.catalog?.playbackMode === 'embed') {
+    return <StatusCanvas player={player} source={{ ...source, connected: false, detail: 'Embed preview is not enabled. Iframe pixels cannot enter the mesh renderer.' }} />;
+  }
   if (!source.connected) return <StatusCanvas player={player} source={source} />;
   if (source.mediaType === 'test') return <TestCanvas player={player} source={source} />;
   if (source.live) {

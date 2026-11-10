@@ -21,6 +21,9 @@
     "test:e2e": "npm run build && playwright test",
     "test:desktop": "node scripts/verify-packaged.mjs",
     "test:desktop-ai": "node scripts/verify-packaged-live-ai.mjs",
+    "test:provider-capture": "npm run build && node scripts/verify-provider-capture.mjs",
+    "test:custom-recording": "npm run build && node scripts/verify-custom-recording.mjs",
+    "test:present": "npm run build && node scripts/verify-present-interactive.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {

@@ -1,4 +1,4 @@
-import { captureDesktop, captureDevice } from './runtime';
+import { captureDesktop, captureDevice, captureProvider } from './runtime';
 import type { MediaSource, OpenedMedia } from '../types';
 
 const pendingConnections = new Map<string, Promise<MediaStream>>();
@@ -15,6 +15,32 @@ export function sourceFromFile(file: OpenedMedia): MediaSource {
     live: false,
     connected: true,
     detail: file.path ?? 'Browser session file — re-add it after reopening the project',
+  };
+}
+
+export interface ProviderCaptureSourceInput {
+  captureId: string;
+  url: string;
+  label: string;
+  providerKind?: 'vidqueen' | 'builtin' | 'custom';
+  providerName?: string;
+}
+
+export function sourceFromProviderCapture(input: ProviderCaptureSourceInput): MediaSource {
+  const providerKind = input.providerKind ?? 'vidqueen';
+  const providerName = input.providerName ?? (providerKind === 'custom' ? 'Custom player' : providerKind === 'builtin' ? 'Provider' : 'Vidqueen');
+  return {
+    id: crypto.randomUUID(),
+    kind: 'provider',
+    mediaType: 'capture',
+    name: `${providerName} — ${input.label}`,
+    providerCaptureId: input.captureId,
+    providerUrl: input.url,
+    providerKind,
+    providerName,
+    live: true,
+    connected: false,
+    detail: `Waiting for the visible ${providerName} window capture…`,
   };
 }
 
@@ -42,9 +68,14 @@ export function connectLiveSource(
   updateSource(source.id, { connected: false, detail: 'Waiting for capture permission…', withAudio });
   const promise = (async () => {
     try {
-      const stream = source.kind === 'desktop'
-        ? await captureDesktop(source.desktopId ?? 'system-picker', withAudio)
-        : await captureDevice(source.deviceId ?? '', withAudio);
+      let stream: MediaStream;
+      if (source.kind === 'desktop') {
+        stream = await captureDesktop(source.desktopId ?? 'system-picker', withAudio);
+      } else if (source.kind === 'provider') {
+        stream = await captureProvider(source.providerCaptureId ?? '', withAudio);
+      } else {
+        stream = await captureDevice(source.deviceId ?? '', withAudio);
+      }
       setStream(source.id, stream);
       updateSource(source.id, {
         connected: true,

@@ -22,6 +22,7 @@ import { BUILT_IN_GRID_CELL_SIZE, snapToCircularGrid } from '../lib/grid';
 import { createDomePreview } from '../lib/domePreview';
 import { DEFAULT_BACKGROUND_COLOR, isDefaultPlayerVisual } from '../lib/appearance';
 import { getRenderQualityPreset, resolveRenderPixelRatio, sampleRenderPerformance } from '../lib/quality';
+import { createAmbientPipeline } from '../lib/ambientPipeline';
 import { boundsFromPoints, playerBounds, pointInRect, smartSnap, type SmartGuide } from '../lib/workflow';
 import { useWorkspace } from '../store/useWorkspace';
 import type { Player, Vec2 } from '../types';
@@ -233,6 +234,7 @@ export function WarpWorkspace() {
   const outputOpacityRef = useRef(useWorkspace.getState().outputOpacity);
   const renderQualityRef = useRef(useWorkspace.getState().renderQuality);
   const planetariumRef = useRef(useWorkspace.getState().planetariumSettings);
+  const presentSettingsRef = useRef(useWorkspace.getState().presentSettings);
   const viewRef = useRef<ViewState>(initialView);
   const [view, setView] = useState<ViewState>(initialView);
   const [tracePreview, setTracePreview] = useState<TracePreview | null>(null);
@@ -254,6 +256,7 @@ export function WarpWorkspace() {
   const outputOpacity = useWorkspace((state) => state.outputOpacity);
   const renderQuality = useWorkspace((state) => state.renderQuality);
   const planetariumSettings = useWorkspace((state) => state.planetariumSettings);
+  const presentSettings = useWorkspace((state) => state.presentSettings);
   const selectPlayer = useWorkspace((state) => state.selectPlayer);
   const selectPlayers = useWorkspace((state) => state.selectPlayers);
   const selectNodes = useWorkspace((state) => state.selectNodes);
@@ -283,6 +286,7 @@ export function WarpWorkspace() {
   outputOpacityRef.current = outputOpacity;
   renderQualityRef.current = renderQuality;
   planetariumRef.current = planetariumSettings;
+  presentSettingsRef.current = presentSettings;
   viewRef.current = view;
 
   useEffect(() => {
@@ -291,7 +295,12 @@ export function WarpWorkspace() {
       dragRef.current = null;
       setTracePreview(null);
     }
-  }, [tool, presentation]);
+    if (presentation && presentSettings.layoutLocked && dragRef.current) {
+      dragRef.current = null;
+      setGuides([]);
+      useWorkspace.getState().endHistory();
+    }
+  }, [tool, presentation, presentSettings.layoutLocked]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -300,13 +309,13 @@ export function WarpWorkspace() {
 
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
-      alpha: false,
+      alpha: true,
       preserveDrawingBuffer: true,
       powerPreference: 'high-performance',
     });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.setClearColor('#141615');
+    renderer.setClearColor('#141615', 1);
     renderer.domElement.className = 'warp-canvas';
     host.appendChild(renderer.domElement);
 
@@ -317,6 +326,7 @@ export function WarpWorkspace() {
     const outputCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
     outputCamera.position.z = 500;
     const domePreview = createDomePreview(renderer);
+    const ambientPipeline = createAmbientPipeline(renderer);
 
     const grid = new THREE.GridHelper(12000, 240, '#343936', '#272b28');
     grid.rotation.x = Math.PI / 2;
@@ -673,6 +683,52 @@ export function WarpWorkspace() {
       }
     };
 
+    const renderAmbientPresentation = (deltaSeconds: number) => {
+      const settings = presentSettingsRef.current.ambient;
+      const transparent = presentSettingsRef.current.transparency;
+      const overlays = [grid, polarGrid, stage, backgroundPlane, stageBorder];
+      const details = [...entries.values()].flatMap((entry) => [entry.flatMesh, entry.wire, entry.border]);
+      const objects = [...overlays, ...details];
+      const visibility = objects.map((object) => object.visible);
+      const groups = [...entries.values()].map((entry) => entry.group);
+      const groupVisibility = groups.map((group) => group.visible);
+      const previousBackground = scene.background;
+      const previousClearColor = renderer.getClearColor(new THREE.Color());
+      const previousClearAlpha = renderer.getClearAlpha();
+      const previousAutoClear = renderer.autoClear;
+      try {
+        objects.forEach((object) => { object.visible = false; });
+        scene.background = null;
+        renderer.setClearColor(0x000000, 0);
+        ambientPipeline.capture(scene, camera, settings, deltaSeconds);
+
+        // Paint the opaque stage first, then the glow, then sharp players. This
+        // ordering also works with a zero-alpha native desktop background.
+        groups.forEach((group) => { group.visible = false; });
+        overlays.forEach((object, index) => { object.visible = visibility[index]; });
+        scene.background = transparent ? null : previousBackground;
+        renderer.setClearColor(transparent ? 0x000000 : previousClearColor, transparent ? 0 : previousClearAlpha);
+        renderer.setRenderTarget(null);
+        renderer.autoClear = true;
+        renderer.render(scene, camera);
+        ambientPipeline.composite(settings);
+
+        objects.forEach((object) => { object.visible = false; });
+        groups.forEach((group, index) => { group.visible = groupVisibility[index]; });
+        scene.background = null;
+        renderer.autoClear = false;
+        renderer.render(scene, camera);
+      } finally {
+        objects.forEach((object, index) => { object.visible = visibility[index]; });
+        groups.forEach((group, index) => { group.visible = groupVisibility[index]; });
+        scene.background = previousBackground;
+        renderer.setClearColor(previousClearColor, previousClearAlpha);
+        renderer.autoClear = previousAutoClear;
+        renderer.setRenderTarget(null);
+      }
+    };
+
+    let previousAmbientTimestamp = 0;
     const animate = (timestamp = performance.now()) => {
       if (disposed) return;
       frame = requestAnimationFrame(animate);
@@ -718,18 +774,19 @@ export function WarpWorkspace() {
       const nextBackgroundColor = backgroundColorRef.current ?? DEFAULT_BACKGROUND_COLOR;
       if (nextBackgroundColor !== activeBackgroundColor) {
         activeBackgroundColor = nextBackgroundColor;
-        const color = new THREE.Color(nextBackgroundColor);
-        scene.background = color;
-        renderer.setClearColor(color, 1);
-        stage.material.color.copy(color);
+        stage.material.color.set(nextBackgroundColor);
         renderer.domElement.dataset.backgroundColor = nextBackgroundColor;
       }
+      const transparentPresentation = presentationRef.current && presentSettingsRef.current.transparency;
+      scene.background = transparentPresentation ? null : stage.material.color;
+      renderer.setClearColor(stage.material.color, transparentPresentation ? 0 : 1);
+      renderer.domElement.dataset.transparency = transparentPresentation ? 'native' : 'opaque';
       const showCustomBackground = !presentationRef.current && backgroundTexture !== null;
       const showBuiltInGrid = !presentationRef.current && !showCustomBackground;
       grid.visible = showBuiltInGrid && gridGeometryRef.current.kind === 'cartesian';
       polarGrid.visible = showBuiltInGrid && gridGeometryRef.current.kind === 'circular';
       stage.material.opacity = outputOpacityRef.current;
-      stage.visible = outputOpacityRef.current > 0;
+      stage.visible = !transparentPresentation && outputOpacityRef.current > 0;
       backgroundPlane.visible = showCustomBackground;
       stageBorder.visible = !presentationRef.current;
 
@@ -854,7 +911,25 @@ export function WarpWorkspace() {
         renderer.render(scene, camera);
         renderer.setScissorTest(false);
       } else {
-        renderer.render(scene, camera);
+        const ambient = presentSettingsRef.current.ambient;
+        const ambientActive = presentationRef.current && ambient.enabled && ambient.intensity > 0
+          && playersRef.current.some((player) => player.visible);
+        renderer.domElement.dataset.ambientEnabled = String(ambientActive);
+        renderer.domElement.dataset.ambientStyle = ambient.style;
+        renderer.domElement.dataset.ambientIntensity = ambient.intensity.toFixed(2);
+        renderer.domElement.dataset.ambientSpread = ambient.spread.toFixed(0);
+        renderer.domElement.dataset.ambientSmoothing = ambient.smoothing.toFixed(2);
+        if (ambientActive) {
+          const deltaSeconds = previousAmbientTimestamp
+            ? Math.min(0.1, Math.max(0.001, (timestamp - previousAmbientTimestamp) / 1000))
+            : 1 / 60;
+          previousAmbientTimestamp = timestamp;
+          renderAmbientPresentation(deltaSeconds);
+        } else {
+          previousAmbientTimestamp = 0;
+          ambientPipeline.reset();
+          renderer.render(scene, camera);
+        }
       }
 
       if (statsStartedAt === 0) {
@@ -885,6 +960,7 @@ export function WarpWorkspace() {
       );
       renderer.setPixelRatio(pixelRatio);
       renderer.setSize(width, height, false);
+      ambientPipeline.resize(width, height);
       renderer.domElement.dataset.renderQuality = renderQualityRef.current;
       renderer.domElement.dataset.pixelRatio = String(pixelRatio);
       const output = outputSizeRef.current;
@@ -919,6 +995,7 @@ export function WarpWorkspace() {
       polarGrid.geometry.dispose();
       (polarGrid.material as THREE.Material).dispose();
       domePreview.dispose();
+      ambientPipeline.dispose();
       renderer.dispose();
       renderer.domElement.remove();
     };
@@ -989,7 +1066,7 @@ export function WarpWorkspace() {
     const screen = eventPoint(event);
     const world = screenToWorld(viewRef.current, screen);
     if (presentation) {
-      if (event.button !== 0) return;
+      if (event.button !== 0 || presentSettings.layoutLocked) return;
       const player = hitPlayer(world);
       if (!player || player.locked) return;
       useWorkspace.getState().beginHistory('Move player in Present mode');
