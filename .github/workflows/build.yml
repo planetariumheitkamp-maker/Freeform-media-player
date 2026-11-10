@@ -39,6 +39,8 @@ jobs:
     needs: test
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -66,33 +68,20 @@ jobs:
       - name: Verify packaged Windows app
         if: matrix.os == 'windows-latest'
         run: npm run test:desktop -- "release/win-unpacked/Freeform Live AI.exe"
-      - name: Upload packages
+      - name: Upload macOS and Linux packages
+        if: matrix.os != 'windows-latest'
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: |
             release/*.AppImage
             release/*.dmg
-            release/*.exe
             release/*.zip
           if-no-files-found: error
           retention-days: 7
-
-  release:
-    name: Publish latest Windows download
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: package
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - name: Download Windows packages
-        uses: actions/download-artifact@v4
-        with:
-          name: freeform-Windows
-          path: release
-      - name: Publish latest release
+      - name: Publish latest Windows download
+        if: matrix.os == 'windows-latest' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

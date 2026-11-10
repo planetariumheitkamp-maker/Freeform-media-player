@@ -285,7 +285,7 @@ The Windows packaged smoke test launches the real executable with an isolated pr
 
 Artifacts are written to `release/`. Build native packages on the target OS, or use the included GitHub Actions matrix for Windows, macOS, and Linux. Configured outputs are NSIS/ZIP for Windows, DMG/ZIP for macOS, and AppImage/ZIP for Linux. Release signing and notarization credentials are intentionally not included.
 
-After tests and packages succeed on `main`, GitHub Actions publishes the Windows installer and portable ZIP as a new `windows-build-*` release and marks it latest. The **Download for Windows** button therefore always points to the newest successful build. This uses GitHub Actions' built-in `GITHUB_TOKEN`; no separate publishing credential is required. Pull-request builds do not publish releases.
+After renderer, unit, browser, and packaged-desktop tests pass on `main`, the Windows package job publishes its installer and portable ZIP directly as a new `windows-build-*` release and marks it latest, without relying on temporary artifact storage. The **Download for Windows** button therefore always points to the newest successful build. macOS and Linux packages are also built; their temporary CI artifacts are retained for seven days when storage is available, and an artifact-storage outage does not block Windows releases. This uses GitHub Actions' built-in `GITHUB_TOKEN`; no separate publishing credential is required. Pull-request builds do not publish releases.
 
 ### Email-sized Windows packages
 
