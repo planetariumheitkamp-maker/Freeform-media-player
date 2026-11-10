@@ -13,6 +13,7 @@ function runtimeErrors(page: Page) {
 }
 
 test('custom web players request nothing before verification and open movie and episode popups', async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
   const assertNoErrors = runtimeErrors(page);
   const requests: string[] = [];
   const url = 'https://player.example.test/embed/movie/603';

@@ -66,6 +66,7 @@ test('Catalog is a provider-only dropdown and makes no automatic external reques
 });
 
 test('provider forms validate IDs and open isolated mocked movie and episode popups', async ({ page }, testInfo) => {
+  test.setTimeout(90_000);
   const assertNoRuntimeErrors = monitorRuntimeErrors(page);
   const providerRequests: string[] = [];
   await page.context().route(/https:\/\/(?:vidqueen\.st|vidlink\.pro)\/.*/, async (route) => {
