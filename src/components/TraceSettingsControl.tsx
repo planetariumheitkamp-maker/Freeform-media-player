@@ -65,6 +65,7 @@ export function TraceSettingsControl() {
   return (
     <>
       <button
+        aria-label="Trace settings"
         className={`trace-settings-tool ${modified ? 'active' : ''}`}
         title="Adjust trace source mapping, smoothing, and interior-node spacing"
         onClick={openDialog}

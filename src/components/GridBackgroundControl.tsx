@@ -91,7 +91,7 @@ export function GridBackgroundControl() {
 
   return (
     <>
-      <button className={background || backgroundColor !== DEFAULT_BACKGROUND_COLOR || geometryModified ? 'active' : ''} title="Customize workspace background and grid" onClick={() => { setError(''); setOpen(true); }}>
+      <button aria-label="Grid" className={background || backgroundColor !== DEFAULT_BACKGROUND_COLOR || geometryModified ? 'active' : ''} title="Customize workspace background and grid" onClick={() => { setError(''); setOpen(true); }}>
         <Grid2X2 size={14} /><span>Grid</span>
       </button>
       {open && (

@@ -89,7 +89,7 @@ export function OutputSizeControl() {
 
   return (
     <>
-      <button className={modified ? 'active' : ''} title="Change output size" onClick={openDialog}>
+      <button aria-label="Output" className={modified ? 'active' : ''} title="Change output size" onClick={openDialog}>
         <Maximize2 size={14} /><span>Output</span>
       </button>
       {open && (

@@ -58,6 +58,14 @@ async function savedValue(page: Page, read: (project: any) => unknown, field?: s
   }, { key: AUTOSAVE_KEY, source: read.toString(), name: field });
 }
 
+test('compact workspace toolbar preserves accessible button names', async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.goto('/');
+  for (const name of ['Select', 'Trace', 'Interior trace', 'Trace settings', 'Border node', 'Interior node', 'Mesh', 'Output', 'Grid', 'Planetarium']) {
+    await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
+  }
+});
+
 test('background colors render, survive presentation and reload, and reset', async ({ page }, testInfo) => {
   const assertNoRuntimeErrors = monitorRuntime(page);
   await page.goto('/');

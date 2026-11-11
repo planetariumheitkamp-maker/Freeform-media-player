@@ -174,7 +174,7 @@ export function PlanetariumControl() {
 
   return (
     <>
-      <button className={settings.enabled ? 'active' : ''} title="Configure single-projector dome warping" onClick={() => setOpen(true)}>
+      <button aria-label="Planetarium" className={settings.enabled ? 'active' : ''} title="Configure single-projector dome warping" onClick={() => setOpen(true)}>
         <Orbit size={14} /><span>Planetarium</span>
       </button>
       {open && (
