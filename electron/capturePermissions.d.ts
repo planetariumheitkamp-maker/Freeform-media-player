@@ -10,7 +10,7 @@ interface CaptureWindow {
 
 export function canUseMainWindowCapture(
   requester: CaptureContents | null | undefined,
-  window: CaptureWindow | null | undefined,
+  window: CaptureWindow | Array<CaptureWindow | null | undefined> | null | undefined,
   permission: string,
   details: { isMainFrame?: boolean } | null | undefined,
 ): boolean;

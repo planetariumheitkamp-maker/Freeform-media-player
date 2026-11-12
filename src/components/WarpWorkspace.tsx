@@ -24,6 +24,7 @@ import { DEFAULT_BACKGROUND_COLOR, isDefaultPlayerVisual } from '../lib/appearan
 import { getRenderQualityPreset, resolveRenderPixelRatio, sampleRenderPerformance } from '../lib/quality';
 import { createAmbientPipeline } from '../lib/ambientPipeline';
 import { boundsFromPoints, playerBounds, pointInRect, smartSnap, type SmartGuide } from '../lib/workflow';
+import { isPresentationWindow } from '../lib/windowRole';
 import { useWorkspace } from '../store/useWorkspace';
 import type { Player, Vec2 } from '../types';
 import { useMedia, type TextureSource } from './MediaContext';
@@ -247,7 +248,7 @@ export function WarpWorkspace() {
   const activeId = useWorkspace((state) => state.activeId);
   const tool = useWorkspace((state) => state.tool);
   const showMesh = useWorkspace((state) => state.showMesh);
-  const presentation = useWorkspace((state) => state.presentation);
+  const presentation = useWorkspace((state) => state.presentation) || isPresentationWindow;
   const background = useWorkspace((state) => state.background);
   const backgroundColor = useWorkspace((state) => state.backgroundColor);
   const gridGeometry = useWorkspace((state) => state.gridGeometry);
@@ -1066,7 +1067,7 @@ export function WarpWorkspace() {
     const screen = eventPoint(event);
     const world = screenToWorld(viewRef.current, screen);
     if (presentation) {
-      if (event.button !== 0 || presentSettings.layoutLocked) return;
+      if (isPresentationWindow || event.button !== 0 || presentSettings.layoutLocked) return;
       const player = hitPlayer(world);
       if (!player || player.locked) return;
       useWorkspace.getState().beginHistory('Move player in Present mode');

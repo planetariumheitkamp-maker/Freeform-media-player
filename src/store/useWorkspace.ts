@@ -136,7 +136,7 @@ interface WorkspaceState {
   resetHistory: () => void;
   undo: () => void;
   redo: () => void;
-  loadProject: (project: ProjectFile) => void;
+  loadProject: (project: ProjectFile, options?: { preserveRuntime?: boolean; presentation?: boolean }) => void;
   pushToast: (toast: Omit<ToastMessage, 'id'>) => void;
   dismissToast: (id: string) => void;
 }
@@ -817,16 +817,17 @@ export const useWorkspace = create<WorkspaceState>()((rawSet, get) => {
       updateHistoryFlags();
     },
 
-    loadProject: (project) => {
+    loadProject: (project, options = {}) => {
+      const preserveRuntime = options.preserveRuntime === true;
       const sources = project.sources.map((source) => ({
         ...source,
-        connected: source.kind === 'stream' || source.kind === 'test',
+        ...(preserveRuntime ? {} : { connected: source.kind === 'stream' || source.kind === 'test' }),
       }));
       if (!sources.some((source) => source.id === TEST_SOURCE.id)) sources.unshift(TEST_SOURCE);
       const players = project.players.map((player) => ({
         ...player,
         visual: normalizePlayerVisual(player.visual),
-        autoplay: false,
+        ...(preserveRuntime ? {} : { autoplay: false }),
       }));
       const normalized = normalizeGroups(players, project.groups);
       rawSet({
@@ -848,7 +849,7 @@ export const useWorkspace = create<WorkspaceState>()((rawSet, get) => {
         selectedNodes: {},
         activeId: players[0]?.id ?? null,
         tool: 'select',
-        presentation: false,
+        presentation: options.presentation ?? false,
       });
       resetHistory();
     },

@@ -1,6 +1,7 @@
 import { ChevronsLeft, ChevronsRight, Maximize2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Inspector } from './components/Inspector';
+import { useMedia } from './components/MediaContext';
 import { MediaLayer } from './components/MediaLayer';
 import { PresentControls } from './components/PresentControls';
 import { SourceRail } from './components/SourceRail';
@@ -11,10 +12,13 @@ import { WarpWorkspace } from './components/WarpWorkspace';
 import { WindowResizeHandles } from './components/WindowResizeHandles';
 import { WorkspaceToolbar } from './components/WorkspaceToolbar';
 import { GUIDE_TARGETS, useGuideTarget } from './lib/guideActions';
-import { parseProject, reauthorizeProjectBackground, reauthorizeProjectFiles, serializeProject } from './lib/project';
+import { parseProject, reauthorizeProjectBackground, reauthorizeProjectFiles, serializePresentationProject, serializeProject } from './lib/project';
+import { presentationTimeNeedsSync } from './lib/presentationMedia';
 import { readRecoveryGenerations, recordDiagnostic, writeRecoveryGeneration } from './lib/recovery';
 import { runtime } from './lib/runtime';
+import { isPresentationWindow } from './lib/windowRole';
 import { useWorkspace } from './store/useWorkspace';
+import type { PresentationMediaState } from './types';
 
 export default function App() {
   const presentation = useWorkspace((state) => state.presentation);
@@ -31,9 +35,11 @@ export default function App() {
   const updateSource = useWorkspace((state) => state.updateSource);
   const setBackground = useWorkspace((state) => state.setBackground);
   const pushToast = useWorkspace((state) => state.pushToast);
+  const { controlElements, setRemoteOutputActive } = useMedia();
   const [leftPanelMinimized, setLeftPanelMinimized] = useState(false);
   const [rightPanelMinimized, setRightPanelMinimized] = useState(false);
   const [controlsMinimized, setControlsMinimized] = useState(false);
+  const [presentWindowOpen, setPresentWindowOpen] = useState(false);
 
   useGuideTarget(GUIDE_TARGETS, () => {
     setLeftPanelMinimized(false);
@@ -42,6 +48,7 @@ export default function App() {
   });
 
   useEffect(() => {
+    if (isPresentationWindow) return;
     const generations = readRecoveryGenerations(localStorage);
     let rejected = 0;
     for (const generation of generations) {
@@ -71,6 +78,37 @@ export default function App() {
   }, [loadProject, pushToast, setBackground, updateSource]);
 
   useEffect(() => {
+    if (!isPresentationWindow) return;
+    let cancelled = false;
+    let receivedUpdate = false;
+    const applyProject = (content: string, initial = false) => {
+      if (cancelled) return;
+      try {
+        const project = parseProject(content);
+        useWorkspace.getState().loadProject(project, { preserveRuntime: true, presentation: true });
+        if (initial) useWorkspace.getState().setPresentation(true);
+      } catch (error) {
+        recordDiagnostic(localStorage, 'error', 'Present workspace sync rejected', error instanceof Error ? error.message : undefined);
+      }
+    };
+    const unsubscribe = runtime.onPresentationProject((content) => {
+      receivedUpdate = true;
+      applyProject(content);
+    });
+    void runtime.getPresentationProject().then((content) => {
+      if (content && !receivedUpdate) applyProject(content, true);
+      else if (content) useWorkspace.getState().setPresentation(true);
+    }).catch((error) => {
+      recordDiagnostic(localStorage, 'error', 'Present workspace could not be opened', error instanceof Error ? error.message : undefined);
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isPresentationWindow) return;
     let timer = 0;
     const unsubscribe = useWorkspace.subscribe((state, previous) => {
       if (state.players === previous.players && state.sources === previous.sources
@@ -99,6 +137,66 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!isPresentationWindow || !runtime.isDesktop) return;
+    return runtime.onPresentationMedia((states) => {
+      states.forEach((state) => {
+        const element = controlElements.current.get(state.playerId);
+        if (!element) return;
+        if (Math.abs(element.playbackRate - state.rate) > 0.001) element.playbackRate = state.rate;
+        if (element.readyState >= HTMLMediaElement.HAVE_METADATA
+          && Number.isFinite(element.duration)
+          && presentationTimeNeedsSync(element.currentTime, state.currentTime, state.paused)) {
+          element.currentTime = Math.max(0, Math.min(state.currentTime, element.duration || state.currentTime));
+        }
+        if (state.paused) element.pause();
+        else void element.play().catch(() => undefined);
+      });
+    });
+  }, [controlElements]);
+
+  useEffect(() => {
+    setRemoteOutputActive(presentWindowOpen);
+    return () => setRemoteOutputActive(false);
+  }, [presentWindowOpen, setRemoteOutputActive]);
+
+  useEffect(() => {
+    if (!presentWindowOpen || isPresentationWindow) return;
+    let projectFrame = 0;
+    let mediaFrame = 0;
+    let lastMediaSync = 0;
+    const unsubscribe = useWorkspace.subscribe(() => {
+      if (projectFrame) return;
+      projectFrame = requestAnimationFrame(() => {
+        projectFrame = 0;
+        void runtime.syncPresentation(serializePresentationProject(useWorkspace.getState())).catch(() => undefined);
+      });
+    });
+    void runtime.syncPresentation(serializePresentationProject(useWorkspace.getState())).catch(() => undefined);
+    const syncMedia = (now: number) => {
+      if (now - lastMediaSync >= 150) {
+        lastMediaSync = now;
+        const states: PresentationMediaState[] = [];
+        controlElements.current.forEach((element, playerId) => {
+          states.push({
+            playerId,
+            currentTime: element.currentTime,
+            paused: element.paused,
+            rate: element.playbackRate,
+          });
+        });
+        void runtime.syncPresentationMedia(states).catch(() => undefined);
+      }
+      mediaFrame = requestAnimationFrame(syncMedia);
+    };
+    mediaFrame = requestAnimationFrame(syncMedia);
+    return () => {
+      unsubscribe();
+      cancelAnimationFrame(projectFrame);
+      cancelAnimationFrame(mediaFrame);
+    };
+  }, [controlElements, presentWindowOpen]);
+
+  useEffect(() => {
     const handleError = (event: ErrorEvent) => recordDiagnostic(localStorage, 'error', event.message, event.error?.stack);
     const handleRejection = (event: PromiseRejectionEvent) => recordDiagnostic(
       localStorage, 'error', 'Unhandled promise rejection',
@@ -112,16 +210,57 @@ export default function App() {
     };
   }, []);
 
+  const exitPresentation = useCallback(() => {
+    if (isPresentationWindow) {
+      void runtime.closePresentation().catch(() => undefined);
+      return;
+    }
+    if (runtime.isDesktop) {
+      setPresentWindowOpen(false);
+      void runtime.closePresentation().catch(() => undefined);
+      return;
+    }
+    setPresentation(false);
+    void runtime.setFullscreen(false).catch(() => undefined);
+  }, [setPresentation]);
+
+  useEffect(() => {
+    if (isPresentationWindow || !runtime.isDesktop) return;
+    return runtime.onPresentationClosed(() => setPresentWindowOpen(false));
+  }, []);
+
   const enterPresentation = useCallback(() => {
+    if (isPresentationWindow) return;
     void (async () => {
       const settings = useWorkspace.getState().presentSettings;
       let nativeWarning: string | undefined;
       if (runtime.isDesktop) {
-        if (settings.layoutLocked && settings.windowPlacement) {
+        if (presentWindowOpen) return;
+        if (settings.layoutLocked) {
+          // Restore the saved geometry in the editor before synchronizing the
+          // separate output, without switching this window into Present mode.
+          setPresentation(true);
+          setPresentation(false);
+        }
+        try {
+          await runtime.openPresentation(serializePresentationProject(useWorkspace.getState()));
+          setPresentWindowOpen(true);
+          setLeftPanelMinimized(false);
+          setRightPanelMinimized(false);
+          setControlsMinimized(false);
+        } catch (error) {
+          pushToast({
+            title: 'Present window could not be opened',
+            detail: error instanceof Error ? error.message : 'The output window is unavailable.',
+            tone: 'error',
+          });
+          return;
+        }
+        if (settings.windowPlacement) {
           try {
             await runtime.setWindowPlacement(settings.windowPlacement);
           } catch (error) {
-            nativeWarning = error instanceof Error ? error.message : 'The saved window position could not be restored.';
+            nativeWarning = error instanceof Error ? error.message : 'The saved output position could not be restored.';
           }
         }
         try {
@@ -130,8 +269,9 @@ export default function App() {
         } catch (error) {
           nativeWarning = error instanceof Error ? error.message : 'Some native Present settings are unavailable.';
         }
+      } else {
+        setPresentation(true);
       }
-      setPresentation(true);
       try {
         await runtime.setFullscreen(true);
       } catch {
@@ -139,24 +279,10 @@ export default function App() {
       }
       if (nativeWarning) pushToast({ title: 'Present restored with a window fallback', detail: nativeWarning, tone: 'warning' });
     })();
-  }, [pushToast, setPresentation]);
-
-  const exitPresentation = useCallback(() => {
-    const settings = useWorkspace.getState().presentSettings;
-    setPresentation(false);
-    void (async () => {
-      await runtime.setFullscreen(false).catch(() => undefined);
-      if (runtime.isDesktop && settings.layoutLocked && settings.windowPlacement) {
-        await runtime.setWindowPlacement(settings.windowPlacement).catch(() => null);
-      }
-      if (runtime.isDesktop) {
-        await Promise.allSettled([runtime.setTransparency(false), runtime.setWindowLocked(false)]);
-      }
-    })();
-  }, [setPresentation]);
+  }, [presentWindowOpen, pushToast, setPresentation]);
 
   useEffect(() => {
-    const transparent = presentation && presentSettings.transparency;
+    const transparent = isPresentationWindow && presentation && presentSettings.transparency;
     document.documentElement.classList.toggle('present-transparent-native', transparent);
     return () => document.documentElement.classList.remove('present-transparent-native');
   }, [presentation, presentSettings.transparency]);
@@ -178,10 +304,10 @@ export default function App() {
         if (document.querySelector('.dialog-backdrop')) return;
         setTool('select');
         setControlsMinimized(false);
-        if (useWorkspace.getState().presentation) exitPresentation();
+        if (isPresentationWindow || presentWindowOpen || useWorkspace.getState().presentation) exitPresentation();
         return;
       }
-      if (editing) return;
+      if (isPresentationWindow || editing) return;
       const key = event.key.toLowerCase();
       if (event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && key === 'f') {
         event.preventDefault();
@@ -236,11 +362,12 @@ export default function App() {
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [copyPlayers, exitPresentation, pastePlayers, pushToast, removePlayers, selectedIds, setShowMesh, setTool, showMesh]);
+  }, [copyPlayers, exitPresentation, pastePlayers, presentWindowOpen, pushToast, removePlayers, selectedIds, setShowMesh, setTool, showMesh]);
 
-  const panelsHidden = presentation || controlsMinimized;
+  const presenting = presentation || isPresentationWindow;
+  const panelsHidden = presenting || controlsMinimized;
   return (
-    <div className={`app-shell${presentation ? ' is-presenting' : ''}${presentation && presentSettings.transparency ? ' is-present-transparent' : ''}${controlsMinimized ? ' is-focus-mode' : ''}`}>
+    <div className={`app-shell${presenting ? ' is-presenting' : ''}${isPresentationWindow && presentSettings.transparency ? ' is-present-transparent' : ''}${controlsMinimized ? ' is-focus-mode' : ''}`} data-window-role={isPresentationWindow ? 'present' : 'editor'}>
       <MediaLayer />
       {!panelsHidden && <TopBar onMinimizeAll={() => setControlsMinimized(true)} onPresent={enterPresentation} />}
       <div className={`app-body${leftPanelMinimized ? ' left-panel-minimized' : ''}${rightPanelMinimized ? ' right-panel-minimized' : ''}${controlsMinimized ? ' controls-minimized' : ''}`}>
@@ -258,9 +385,9 @@ export default function App() {
           <button className="panel-restore panel-restore-right" title="Restore inspector panel" aria-label="Restore inspector panel" onClick={() => setRightPanelMinimized(false)}><ChevronsLeft size={16} /></button>
         )}
       </div>
-      {controlsMinimized && !presentation && <button className="restore-controls button" aria-label="Show control panels" title="Show control panels (Shift+F or Esc)" onClick={() => setControlsMinimized(false)}><Maximize2 size={14} />Show control panels <kbd>Shift+F</kbd></button>}
-      {presentation && <PresentControls onExit={exitPresentation} />}
-      {runtime.isDesktop && runtime.platform === 'win32' && !presentation && <WindowResizeHandles />}
+      {controlsMinimized && !presenting && <button className="restore-controls button" aria-label="Show control panels" title="Show control panels (Shift+F or Esc)" onClick={() => setControlsMinimized(false)}><Maximize2 size={14} />Show control panels <kbd>Shift+F</kbd></button>}
+      {!isPresentationWindow && (presentWindowOpen || presentation) && <PresentControls onExit={exitPresentation} />}
+      {isPresentationWindow && runtime.isDesktop && runtime.platform === 'win32' && <WindowResizeHandles />}
       <Toasts />
     </div>
   );

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createPlayer, TEST_SOURCE } from '../../src/data/defaults';
 import { DEFAULT_PLANETARIUM_SETTINGS } from '../../src/lib/dome';
-import { parseProject, reauthorizeProjectBackground, reauthorizeProjectFiles, serializeProject } from '../../src/lib/project';
+import { parseProject, reauthorizeProjectBackground, reauthorizeProjectFiles, serializePresentationProject, serializeProject } from '../../src/lib/project';
 import type { MediaSource } from '../../src/types';
 
 function localSource(): MediaSource {
@@ -31,6 +31,19 @@ describe('project persistence', () => {
     expect(project.players[0].quickCorners).toEqual(player.quickCorners);
     expect(project.sources[1].path).toBe('/media/movie.webm');
     expect(project.format).toBe('freeform-workspace');
+  });
+
+  it('keeps live session state only in presentation IPC snapshots', () => {
+    const source = { ...localSource(), uri: 'blob:live-session', connected: true };
+    const player = { ...createPlayer(1, source.id), autoplay: true };
+    const state = { projectName: 'Live output', sources: [source], players: [player], groups: [] };
+    const output = parseProject(serializePresentationProject(state));
+    expect(output.sources[0].uri).toBe('blob:live-session');
+    expect(output.sources[0].connected).toBe(true);
+    expect(output.players[0].autoplay).toBe(true);
+    const saved = parseProject(serializeProject(state));
+    expect(saved.sources[0].uri).toBeUndefined();
+    expect(saved.sources[0].connected).toBe(false);
   });
 
   it('exports local references without session URLs or live connection state', () => {

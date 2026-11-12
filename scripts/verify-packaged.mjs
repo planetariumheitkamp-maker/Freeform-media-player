@@ -47,6 +47,25 @@ try {
   assert.equal(appInfo.packaged, true);
   checks.push('Packaged executable starts with the desktop preload and WebGL canvas.');
 
+  assert.equal(electronApp.windows().length, 1);
+  const nativeEditor = await electronApp.evaluate(({ BrowserWindow }) => {
+    const editor = BrowserWindow.getAllWindows()[0];
+    editor.maximize();
+    const maximized = editor.isMaximized();
+    editor.unmaximize();
+    return {
+      movable: editor.isMovable(), resizable: editor.isResizable(),
+      maximized, restored: !editor.isMaximized(),
+    };
+  });
+  assert(nativeEditor.movable && nativeEditor.resizable);
+  assert(nativeEditor.maximized && nativeEditor.restored);
+  for (const name of ['Minimize window', 'Maximize window', 'Restore window', 'Close window']) {
+    await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
+  }
+  await expect(page.locator('.window-controls')).toHaveCount(0);
+  checks.push('One ordinary native editor starts with working OS maximize/restore and no custom caption buttons.');
+
   const setInput = async (selector, value) => {
     await page.locator(selector).evaluate((input, next) => {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
@@ -186,11 +205,108 @@ try {
   await expect(page.getByRole('button', { name: 'Recordings', exact: true })).toBeVisible();
   checks.push('Removed Catalog, custom verification, and Live AI controls are absent; core source controls remain.');
 
+  const outputOpened = electronApp.waitForEvent('window');
+  await page.getByRole('button', { name: 'Present', exact: true }).click();
+  const outputPage = await outputOpened;
+  outputPage.on('pageerror', (error) => runtimeErrors.push(`Output: ${error.message}`));
+  outputPage.on('console', (message) => {
+    if (message.type() === 'error') runtimeErrors.push(`Output: ${message.text()}`);
+  });
+  const outputCanvas = outputPage.locator('canvas.warp-canvas');
+  await expect(outputCanvas).toBeVisible({ timeout: 30_000 });
+  await expect(outputPage.locator('.app-shell')).toHaveAttribute('data-window-role', 'present');
+  await expect(outputPage).toHaveURL(/[?&]present=1/);
+  await expect.poll(() => electronApp.windows().length).toBe(2);
+  await expect(outputPage.locator('.top-bar')).toHaveCount(0);
+  await expect(outputPage.locator('.present-controls')).toHaveCount(0);
+  await expect(outputPage.locator('[data-window-resize]')).toHaveCount(8);
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-window-role', 'editor');
+  await expect(page.locator('.top-bar')).toBeVisible();
+  await expect(page.locator('.source-rail')).toBeVisible();
+  await expect(page.locator('.inspector')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Present controls', exact: true })).toBeVisible();
+  await expect(outputCanvas).toHaveAttribute('data-render-quality', 'high');
+  await expect(outputCanvas).toHaveAttribute('data-background-color', '#28445f');
+  checks.push('Present creates a separate read-only output while the native editor and all ordinary controls remain.');
+
+  const beforeOutputEdit = await outputCanvas.evaluate((element) => element.toDataURL());
+  await setInput('input[data-visual-field="brightness"]', 1.6);
+  await expect.poll(() => outputCanvas.evaluate((element) => element.toDataURL()), { timeout: 30_000 }).not.toBe(beforeOutputEdit);
+  await page.getByRole('button', { name: 'Grid', exact: true }).click();
+  await page.getByRole('button', { name: 'Use background color #1e3448', exact: true }).click();
+  await expect(outputCanvas).toHaveAttribute('data-background-color', '#1e3448');
+  await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await page.getByRole('button', { name: 'Present controls', exact: true }).click();
+  await expect(page.locator('.present-control-panel')).toBeVisible();
+  await page.getByRole('button', { name: /Ambient lighting/ }).click();
+  await expect(outputCanvas).toHaveAttribute('data-ambient-enabled', 'true');
+  await page.getByRole('button', { name: /Transparent background/ }).click();
+  await expect(outputCanvas).toHaveAttribute('data-transparency', 'native');
+  await expect(page.locator('.app-shell')).not.toHaveClass(/is-present-transparent/);
+  checks.push('Native visual, grid-color, and ambient changes mirror to the output; transparency affects only the output.');
+
+  await page.getByRole('button', { name: /Layout \+ window/ }).click();
+  await expect.poll(() => electronApp.evaluate(({ BrowserWindow }) => {
+    const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
+    return output?.isMovable();
+  })).toBe(false);
+  const lockedWindows = await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map((window) => ({
+    output: new URL(window.webContents.getURL()).searchParams.get('present') === '1',
+    movable: window.isMovable(), resizable: window.isResizable(),
+  })));
+  const lockedEditor = lockedWindows.find((window) => !window.output);
+  const lockedOutput = lockedWindows.find((window) => window.output);
+  assert(lockedEditor?.movable && lockedEditor.resizable);
+  assert(lockedOutput && !lockedOutput.movable && !lockedOutput.resizable);
+  assert.equal(await outputPage.evaluate(() => window.freeform.beginWindowResize('se', { x: 0, y: 0 })), false);
+  await expect(page.locator('[data-window-resize]')).toHaveCount(0);
+  await page.getByRole('button', { name: /Layout \+ window/ }).click();
+  await expect.poll(() => electronApp.evaluate(({ BrowserWindow }) => {
+    const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
+    return output?.isMovable();
+  })).toBe(true);
+  const beforeOutputResize = await electronApp.evaluate(({ BrowserWindow }) => {
+    const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
+    return output.getBounds();
+  });
+  const resizedOutput = await outputPage.evaluate(async () => {
+    const started = await window.freeform.beginWindowResize('se', { x: 100, y: 100 });
+    const after = started ? await window.freeform.updateWindowResize({ x: 140, y: 130 }) : null;
+    await window.freeform.endWindowResize();
+    return { started, after };
+  });
+  assert(resizedOutput.started);
+  assert.equal(resizedOutput.after.width, beforeOutputResize.width + 40);
+  assert.equal(resizedOutput.after.height, beforeOutputResize.height + 30);
+  checks.push('Output locking leaves the editor movable/resizable; unlocked output resize IPC changes real bounds.');
+
+  await page.screenshot({ path: path.join(outputDirectory, 'desktop-editor-present.png') });
+  await outputPage.screenshot({ path: path.join(outputDirectory, 'desktop-output-present.png') });
+  await outputPage.evaluate(() => { void window.freeform.closePresentation(); });
+  await expect.poll(() => electronApp.windows().length).toBe(1);
+  await expect(page.locator('.top-bar')).toBeVisible();
+  await expect(page.locator('.present-controls')).toHaveCount(0);
+
+  const secondOutputOpened = electronApp.waitForEvent('window');
+  await page.getByRole('button', { name: 'Present', exact: true }).click();
+  const secondOutputPage = await secondOutputOpened;
+  await expect(secondOutputPage.locator('canvas.warp-canvas')).toBeVisible({ timeout: 30_000 });
+  await expect.poll(() => electronApp.windows().length).toBe(2);
+  await page.keyboard.press('Escape');
+  await expect.poll(() => electronApp.windows().length).toBe(1);
+  await expect(page.locator('.top-bar')).toBeVisible();
+  checks.push('Closing Present or pressing Escape in the editor closes only the output and leaves the editor open.');
+
   await page.locator('.warp-workspace').screenshot({
     path: path.join(outputDirectory, 'desktop-planetarium.png'),
   });
   assert.deepEqual(runtimeErrors, []);
-  checks.push('No renderer console errors or uncaught page errors were observed.');
+  checks.push('No renderer console errors or uncaught page errors were observed in either window.');
+
+  await page.screenshot({ path: path.join(outputDirectory, 'desktop-editor.png') });
+  await electronApp.close();
+  electronApp = null;
+  checks.push('The packaged application closes cleanly after its output is closed.');
 
   await writeFile(path.join(outputDirectory, 'desktop-verification.json'), JSON.stringify({
     executablePath,

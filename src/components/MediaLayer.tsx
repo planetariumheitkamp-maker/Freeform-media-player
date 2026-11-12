@@ -2,6 +2,8 @@ import Hls from 'hls.js';
 import hlsWorkerUrl from 'hls.js/dist/hls.worker.js?url';
 import { useCallback, useEffect, useRef, type RefObject } from 'react';
 import { formatTime } from '../lib/format';
+import { connectLiveSource } from '../lib/sourceActions';
+import { isPresentationWindow } from '../lib/windowRole';
 import { useWorkspace } from '../store/useWorkspace';
 import type { MediaSource, Player, TestPatternKind } from '../types';
 import { useMedia, type TextureSource } from './MediaContext';
@@ -115,16 +117,35 @@ function useMediaProperties(
   player: Player,
   live: boolean,
 ) {
+  const remoteOutputActive = useMedia().remoteOutputActive;
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
     element.volume = player.volume;
-    element.muted = player.muted;
+    element.muted = player.muted || (remoteOutputActive && !isPresentationWindow);
     if (!live) element.loop = player.loop;
     if (!live && Math.abs(element.playbackRate - player.rate) > 0.001) {
       element.playbackRate = player.rate;
     }
-  }, [live, player.loop, player.muted, player.rate, player.volume, ref]);
+  }, [live, player.loop, player.muted, player.rate, player.volume, ref, remoteOutputActive]);
+}
+
+function LiveSourceConnector({ source }: { source: MediaSource }) {
+  const { getStream, setStream } = useMedia();
+  const updateSource = useWorkspace((state) => state.updateSource);
+  useEffect(() => {
+    if (!isPresentationWindow || !source.live || !source.connected || getStream(source.id)) return;
+    let cancelled = false;
+    void connectLiveSource(source, source.withAudio ?? false, { setStream, updateSource }).then((stream) => {
+      if (!cancelled) return;
+      if (!useWorkspace.getState().players.some((player) => player.sourceId === source.id)) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    }).catch(() => undefined);
+    // Do not stop the shared stream in cleanup: StrictMode immediately mounts again.
+    return () => { cancelled = true; };
+  }, [getStream, setStream, source, updateSource]);
+  return null;
 }
 
 function drawFrameLabel(context: CanvasRenderingContext2D, label: string, x: number, y: number) {
@@ -445,7 +466,7 @@ function AudioSurface({ player, source }: { player: Player; source: MediaSource 
   );
 }
 
-function PlayerMedia({ player, source }: { player: Player; source: MediaSource }) {
+function PlayerSurface({ player, source }: { player: Player; source: MediaSource }) {
   const { getStream } = useMedia();
   if (!source.connected) return <StatusCanvas player={player} source={source} />;
   if (source.mediaType === 'test') return <TestCanvas player={player} source={source} />;
@@ -458,6 +479,10 @@ function PlayerMedia({ player, source }: { player: Player; source: MediaSource }
   if (source.mediaType === 'image') return <ImageMedia player={player} source={source} />;
   if (source.mediaType === 'audio') return <AudioSurface player={player} source={source} />;
   return <DirectMedia player={player} source={source} />;
+}
+
+function PlayerMedia({ player, source }: { player: Player; source: MediaSource }) {
+  return <><LiveSourceConnector source={source} /><PlayerSurface player={player} source={source} /></>;
 }
 
 export function MediaLayer() {

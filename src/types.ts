@@ -124,6 +124,13 @@ export interface DesktopWindowPlacement {
   displayId: string;
 }
 
+export interface PresentationMediaState {
+  playerId: string;
+  currentTime: number;
+  paused: boolean;
+  rate: number;
+}
+
 export interface PresentLayoutSnapshot {
   players: Player[];
   output: WorkspaceOutputSize;
@@ -291,6 +298,14 @@ export interface FreeformBridge {
   showRecordingFolder(): Promise<RecordingState>;
   saveProject(defaultName: string, content: string): Promise<SaveProjectResult>;
   openProject(): Promise<OpenProjectResult>;
+  openPresentation(project: string): Promise<void>;
+  closePresentation(): Promise<void>;
+  getPresentationProject(): Promise<string | null>;
+  syncPresentation(project: string): Promise<void>;
+  onPresentationProject(callback: (project: string) => void): () => void;
+  syncPresentationMedia(states: PresentationMediaState[]): Promise<void>;
+  onPresentationMedia(callback: (states: PresentationMediaState[]) => void): () => void;
+  onPresentationClosed(callback: () => void): () => void;
   setFullscreen(value: boolean): Promise<void>;
   getWindowPlacement(): Promise<DesktopWindowPlacement | null>;
   setWindowPlacement(placement: DesktopWindowPlacement): Promise<DesktopWindowPlacement | null>;

@@ -334,7 +334,7 @@ export function PresentControls({ onExit }: { onExit: () => void }) {
                   className={`present-toggle${settings.layoutLocked ? ' is-active' : ''}`}
                   aria-pressed={settings.layoutLocked}
                   disabled={busy}
-                  title="Save this geometry and app window, restore them on entry, and prevent Present dragging"
+                  title="Save this geometry and output-window placement, restore them on entry, and prevent output movement"
                   onClick={() => void toggleLock()}
                 >
                   {settings.layoutLocked ? <Lock size={15} /> : <Unlock size={15} />}
@@ -389,8 +389,10 @@ export function PresentControls({ onExit }: { onExit: () => void }) {
               )}
               <div className="present-control-status" aria-live="polite">
                 {settings.layoutLocked
-                  ? 'Saved geometry and window restore each time Present starts. Media changes remain available.'
-                  : 'Drag players to position them. Lock to keep this arrangement.'}
+                  ? 'Saved geometry and output placement restore each time Present starts. Editing stays in this window.'
+                  : runtime.isDesktop
+                    ? 'Edit players here to update the output live. Lock to save this arrangement and placement.'
+                    : 'Drag players to position them. Lock to keep this arrangement.'}
               </div>
             </div>
           ) : (

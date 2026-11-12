@@ -106,6 +106,30 @@ const browserBridge: FreeformBridge = {
     if (!file) return { canceled: true };
     return { canceled: false, path: file.name, content: await file.text() };
   },
+  async openPresentation() {
+    throw new Error('A separate output window requires the Freeform desktop app.');
+  },
+  async closePresentation() {
+    // Browser presentation uses the current tab instead of a separate window.
+  },
+  async getPresentationProject() {
+    return null;
+  },
+  async syncPresentation() {
+    // Browser presentation already shares the current renderer state.
+  },
+  onPresentationProject() {
+    return () => undefined;
+  },
+  async syncPresentationMedia() {
+    // Browser presentation already shares the current media elements.
+  },
+  onPresentationMedia() {
+    return () => undefined;
+  },
+  onPresentationClosed() {
+    return () => undefined;
+  },
   async setFullscreen(value: boolean) {
     if (value && !document.fullscreenElement) {
       await document.documentElement.requestFullscreen();

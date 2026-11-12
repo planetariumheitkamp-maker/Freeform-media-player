@@ -35,6 +35,7 @@ input[type='checkbox'] { accent-color: var(--mint); }
 ::selection { color: #1f1f1f; background: var(--mint); }
 
 .app-shell { width: 100%; height: 100dvh; min-width: 960px; min-height: 600px; display: flex; flex-direction: column; background: var(--bg); }
+.app-shell[data-window-role='present'] { min-width: 0; min-height: 0; }
 .app-body { --left-panel-width: 264px; --right-panel-width: 292px; position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: var(--left-panel-width) minmax(0, 1fr) var(--right-panel-width); }
 .app-body.left-panel-minimized { --left-panel-width: 0px; }
 .app-body.right-panel-minimized { --right-panel-width: 0px; }
@@ -69,7 +70,8 @@ input[type='checkbox'] { accent-color: var(--mint); }
 .project-title input:hover, .project-title input:focus { border-color: var(--line); background: #1e201e; }
 .project-title > span:last-child { color: var(--dim); font-family: 'Fira Mono', monospace; font-size: 8px; letter-spacing: .8px; white-space: nowrap; }
 .save-indicator { width: 5px; height: 5px; flex: 0 0 auto; border-radius: 50%; background: var(--mint); box-shadow: 0 0 7px rgba(197, 255, 195, .3); }
-.top-actions { display: flex; align-items: center; gap: 6px; }
+.top-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.top-bar button, .top-bar input { -webkit-app-region: no-drag; }
 .button { min-height: 31px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 11px; border: 1px solid transparent; border-radius: 3px; font-size: 11px; font-weight: 500; white-space: nowrap; transition: background .14s, border-color .14s, color .14s; }
 .button.subtle { background: #2b2e2c; border-color: var(--line); color: #d4d7d4; }
 .button.subtle:hover:not(:disabled) { background: #343835; border-color: #515752; }
@@ -191,8 +193,9 @@ input[type='range']::-moz-range-thumb { width: 9px; height: 9px; border: 1px sol
 .render-separator { color: #474d48; }
 .warp-workspace { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; cursor: default; background: #141615; }
 .warp-workspace.is-adding { cursor: crosshair; }
-.is-presenting .warp-workspace { cursor: grab; }
-.is-presenting .warp-workspace:active { cursor: grabbing; }
+.app-shell[data-window-role='editor'].is-presenting .warp-workspace { cursor: grab; }
+.app-shell[data-window-role='editor'].is-presenting .warp-workspace:active { cursor: grabbing; }
+.app-shell[data-window-role='present'] .warp-workspace { cursor: default; }
 .canvas-host, .warp-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .workspace-overlay { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
 .stage-label { fill: #69716b; font-family: 'Fira Mono', monospace; font-size: 9px; letter-spacing: 1.2px; }

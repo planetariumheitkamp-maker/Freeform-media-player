@@ -19,6 +19,26 @@ contextBridge.exposeInMainWorld('freeform', {
   showRecordingFolder: () => ipcRenderer.invoke('recording:show-folder'),
   saveProject: (defaultName, content) => ipcRenderer.invoke('project:save', defaultName, content),
   openProject: () => ipcRenderer.invoke('project:open'),
+  openPresentation: (project) => ipcRenderer.invoke('presentation:open', project),
+  closePresentation: () => ipcRenderer.invoke('presentation:close'),
+  getPresentationProject: () => ipcRenderer.invoke('presentation:get-project'),
+  syncPresentation: (project) => ipcRenderer.invoke('presentation:sync', project),
+  onPresentationProject: (callback) => {
+    const listener = (_event, project) => callback(project);
+    ipcRenderer.on('presentation:project', listener);
+    return () => ipcRenderer.removeListener('presentation:project', listener);
+  },
+  syncPresentationMedia: (states) => ipcRenderer.invoke('presentation:media-sync', states),
+  onPresentationMedia: (callback) => {
+    const listener = (_event, states) => callback(states);
+    ipcRenderer.on('presentation:media', listener);
+    return () => ipcRenderer.removeListener('presentation:media', listener);
+  },
+  onPresentationClosed: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('presentation:closed', listener);
+    return () => ipcRenderer.removeListener('presentation:closed', listener);
+  },
   setFullscreen: (value) => ipcRenderer.invoke('window:fullscreen', value),
   getWindowPlacement: () => ipcRenderer.invoke('window:get-placement'),
   setWindowPlacement: (placement) => ipcRenderer.invoke('window:set-placement', placement),

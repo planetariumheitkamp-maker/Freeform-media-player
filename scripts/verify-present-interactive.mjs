@@ -13,8 +13,13 @@ await rm(directory, { recursive: true, force: true });
 await rm(path.join(root, 'artifacts', 'present-mode'), { recursive: true, force: true });
 await mkdir(directory, { recursive: true });
 await copyFile(path.join(root, 'scripts', 'native-present-harness.cjs'), path.join(directory, 'bootstrap.cjs'));
+await copyFile(path.join(root, 'scripts', 'native-present-media.cjs'), path.join(directory, 'native-present-media.cjs'));
 await writeFile(path.join(directory, 'package.json'), JSON.stringify({ name: 'freeform-present-native-test', version: '0.0.0', private: true, main: 'bootstrap.cjs' }, null, 2));
-for (const [output, source] of [[launcher, 'native-launcher.cs'], [pointerDrag, 'native-pointer-drag.cs']]) {
+for (const [output, source] of [
+  [launcher, 'native-launcher.cs'],
+  [pointerDrag, 'native-pointer-drag.cs'],
+  [path.join(root, 'test-results', 'native-window-style.exe'), 'native-window-style.cs'],
+]) {
   execFileSync(compiler, [
     '-nologo', '-target:exe', `-out:${output}`, path.join(root, 'scripts', source),
   ], { cwd: root, stdio: 'inherit' });
@@ -31,7 +36,7 @@ const exitCode = await new Promise((resolve, reject) => {
 // Electron's relaunch is detached from the first launcher; wait for its report instead of
 // mistaking the intentionally saved `restart` checkpoint for a failed verification.
 const reportPath = path.join(root, 'artifacts', 'present-mode', 'report.json');
-const deadline = Date.now() + 150_000;
+const deadline = Date.now() + 235_000;
 let report;
 let readError;
 while (Date.now() < deadline) {

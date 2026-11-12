@@ -5,6 +5,8 @@ export type TextureSource = HTMLVideoElement | HTMLImageElement | HTMLCanvasElem
 
 interface MediaContextValue {
   version: number;
+  remoteOutputActive: boolean;
+  setRemoteOutputActive: (active: boolean) => void;
   textureSources: React.MutableRefObject<Map<string, TextureSource>>;
   controlElements: React.MutableRefObject<Map<string, HTMLMediaElement>>;
   getStream: (sourceId: string) => MediaStream | undefined;
@@ -25,6 +27,7 @@ export function MediaProvider({ children }: { children: ReactNode }) {
   const streamReferences = useRef(new Map<string, number>());
   const stopTimers = useRef(new Map<string, number>());
   const [version, setVersion] = useState(0);
+  const [remoteOutputActive, setRemoteOutputActive] = useState(false);
   const invalidate = useCallback(() => setVersion((value) => value + 1), []);
 
   const getStream = useCallback((sourceId: string) => streams.current.get(sourceId), []);
@@ -99,6 +102,8 @@ export function MediaProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<MediaContextValue>(() => ({
     version,
+    remoteOutputActive,
+    setRemoteOutputActive,
     textureSources,
     controlElements,
     getStream,
@@ -110,6 +115,7 @@ export function MediaProvider({ children }: { children: ReactNode }) {
     registerControl,
   }), [
     version,
+    remoteOutputActive,
     getStream,
     setStream,
     acquireStream,

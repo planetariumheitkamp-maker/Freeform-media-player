@@ -318,6 +318,17 @@ export function serializeProject(state: ProjectState): string {
   return JSON.stringify(project, null, 2);
 }
 
+/** Keeps live session URLs and playback flags inside the two desktop renderers only. */
+export function serializePresentationProject(state: ProjectState): string {
+  const project = JSON.parse(serializeProject(state)) as ProjectFile;
+  return JSON.stringify({
+    ...project,
+    sources: state.sources,
+    players: state.players,
+    background: state.background ?? null,
+  });
+}
+
 const MAX_EMBEDDED_FILE_BYTES = 256 * 1024 * 1024;
 const MAX_PORTABLE_PROJECT_BYTES = 512 * 1024 * 1024;
 

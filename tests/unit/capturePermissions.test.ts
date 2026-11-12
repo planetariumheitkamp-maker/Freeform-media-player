@@ -32,6 +32,17 @@ describe('main-window capture permissions', () => {
     expect(canUseMainWindowCapture(owner, null, 'media', mainFrame)).toBe(false);
   });
 
+  it('allows either the editor or output while rejecting foreign requesters', () => {
+    const editor = contents(7);
+    const output = contents(11);
+    const windows = [windowWith(editor), windowWith(output), null, undefined];
+    expect(canUseMainWindowCapture(output, windows, 'media', mainFrame)).toBe(true);
+    expect(canUseMainWindowCapture(editor, windows, 'display-capture', mainFrame)).toBe(true);
+    expect(canUseMainWindowCapture(contents(12), windows, 'media', mainFrame)).toBe(false);
+    expect(canUseMainWindowCapture(output, [windowWith(editor), windowWith(output, true)], 'media', mainFrame)).toBe(false);
+    expect(canUseMainWindowCapture(editor, [], 'media', mainFrame)).toBe(false);
+  });
+
   it('denies non-main frames even when they share the main webContents ID', () => {
     const owner = contents(7);
     expect(canUseMainWindowCapture(owner, windowWith(owner), 'display-capture', { isMainFrame: false })).toBe(false);

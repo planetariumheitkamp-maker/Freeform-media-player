@@ -21,8 +21,11 @@ import { resizeWindowBounds, resolveWindowPlacement, WINDOW_RESIZE_DIRECTIONS } 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const allowedMediaPaths = new Set();
 const MAIN_WINDOW_MINIMUM_SIZE = [1080, 700];
+const PRESENT_WINDOW_MINIMUM_SIZE = [320, 240];
 let mainWindow;
-let pendingDesktopRequest = null;
+let presentationWindow;
+let presentationProject = null;
+const pendingDesktopRequests = new Map();
 let presentationWindowLocked = false;
 let applyingWindowPlacement = false;
 let presentationNormalPlacement = null;
@@ -32,12 +35,23 @@ function finishWindowResize() {
   windowResizeSession = null;
 }
 
-function getMainWindowPlacement() {
-  if (!mainWindow) return null;
+function getPresentationWindowPlacement() {
+  if (!presentationWindow) return null;
   if (presentationNormalPlacement) return { ...presentationNormalPlacement };
-  const bounds = mainWindow.getNormalBounds();
+  const bounds = presentationWindow.getNormalBounds();
   const display = screen.getDisplayMatching(bounds);
   return { ...bounds, displayId: String(display.id) };
+}
+
+function canControlPresentation(frame) {
+  return Boolean(presentationWindow && (
+    isMainWindowFrame(frame, mainWindow) || isMainWindowFrame(frame, presentationWindow)
+  ));
+}
+
+function sendToPresentation(channel, payload) {
+  if (!presentationWindow || presentationWindow.isDestroyed() || presentationWindow.webContents.isDestroyed()) return;
+  presentationWindow.webContents.send(channel, payload);
 }
 
 const recordings = createRecordingController({ getMainWindow: () => mainWindow, describeFile });
@@ -85,6 +99,10 @@ function describeFile(filePath) {
     mediaType,
     mime,
   };
+}
+
+function isTrustedMainFrame(frame) {
+  return isMainWindowFrame(frame, mainWindow) || isMainWindowFrame(frame, presentationWindow);
 }
 
 function registerProjectHandlers() {
@@ -151,63 +169,91 @@ function registerProjectHandlers() {
     return { canceled: false, path: filePath, content };
   });
 
+  ipcMain.handle('presentation:open', async (event, project) => {
+    if (!isMainWindowFrame(event.senderFrame, mainWindow)) throw new Error('Only the Freeform editor can open Present.');
+    if (typeof project !== 'string') throw new Error('A workspace snapshot is required.');
+    presentationProject = project;
+    if (!presentationWindow) await createPresentationWindow();
+    presentationWindow?.show();
+    mainWindow?.focus();
+  });
+
+  ipcMain.handle('presentation:close', (event) => {
+    if (!canControlPresentation(event.senderFrame)) throw new Error('Only Freeform can close Present.');
+    presentationWindow?.close();
+  });
+
+  ipcMain.handle('presentation:get-project', (event) => {
+    if (!isMainWindowFrame(event.senderFrame, presentationWindow)) return null;
+    return presentationProject;
+  });
+
+  ipcMain.handle('presentation:sync', (event, project) => {
+    if (!isMainWindowFrame(event.senderFrame, mainWindow) || typeof project !== 'string') return;
+    presentationProject = project;
+    sendToPresentation('presentation:project', project);
+  });
+
+  ipcMain.handle('presentation:media-sync', (event, states) => {
+    if (!isMainWindowFrame(event.senderFrame, mainWindow) || !Array.isArray(states)) return;
+    sendToPresentation('presentation:media', states);
+  });
+
   ipcMain.handle('window:fullscreen', async (event, value) => {
-    if (!isMainWindowFrame(event.senderFrame, mainWindow)) throw new Error('Only Freeform can change the window.');
+    if (!canControlPresentation(event.senderFrame)) throw new Error('Only Freeform can change the output window.');
     finishWindowResize();
     if (value) {
-      // Some Windows configurations expand the window without reporting
-      // isFullScreen(). Keep the editing bounds independently of either path.
-      presentationNormalPlacement ??= getMainWindowPlacement();
-      mainWindow?.setFullScreen(true);
+      // Keep normal output bounds independently of the fullscreen transition.
+      presentationNormalPlacement ??= getPresentationWindowPlacement();
+      presentationWindow?.setFullScreen(true);
     } else {
-      mainWindow?.setFullScreen(false);
+      presentationWindow?.setFullScreen(false);
       presentationNormalPlacement = null;
     }
   });
 
   ipcMain.handle('window:get-placement', (event) => {
-    if (!isMainWindowFrame(event.senderFrame, mainWindow)) return null;
-    return getMainWindowPlacement();
+    if (!canControlPresentation(event.senderFrame)) return null;
+    return getPresentationWindowPlacement();
   });
 
   ipcMain.handle('window:set-placement', (event, input) => {
-    if (!isMainWindowFrame(event.senderFrame, mainWindow) || !mainWindow) return null;
+    if (!canControlPresentation(event.senderFrame)) return null;
     const placement = resolveWindowPlacement(
       input,
       screen.getAllDisplays(),
-      mainWindow.getNormalBounds(),
-      MAIN_WINDOW_MINIMUM_SIZE,
+      presentationWindow.getNormalBounds(),
+      PRESENT_WINDOW_MINIMUM_SIZE,
     );
     if (!placement) return null;
     applyingWindowPlacement = true;
     try {
-      if (mainWindow.isFullScreen()) mainWindow.setFullScreen(false);
+      if (presentationWindow.isFullScreen()) presentationWindow.setFullScreen(false);
       // Unlocking cannot clear this transparent window's native size limits.
-      mainWindow.setMaximumSize(0, 0);
-      mainWindow.setBounds(placement);
+      presentationWindow.setMaximumSize(0, 0);
+      presentationWindow.setBounds(placement);
     } finally {
       applyingWindowPlacement = false;
     }
-    return { ...mainWindow.getNormalBounds(), displayId: placement.displayId };
+    return { ...presentationWindow.getNormalBounds(), displayId: placement.displayId };
   });
 
   ipcMain.handle('window:set-locked', (event, value) => {
-    if (!isMainWindowFrame(event.senderFrame, mainWindow)) throw new Error('Only Freeform can lock the window.');
+    if (!canControlPresentation(event.senderFrame)) throw new Error('Only Freeform can lock the output window.');
     presentationWindowLocked = Boolean(value);
     if (presentationWindowLocked) finishWindowResize();
-    if (!mainWindow) return;
-    mainWindow.setMovable(!presentationWindowLocked);
-    mainWindow.setResizable(!presentationWindowLocked);
+    presentationWindow?.setMovable(!presentationWindowLocked);
+    presentationWindow?.setResizable(!presentationWindowLocked);
   });
 
   ipcMain.handle('window:begin-resize', (event, direction, cursor) => {
-    if (!isMainWindowFrame(event.senderFrame, mainWindow) || !mainWindow) return false;
+    if (!isMainWindowFrame(event.senderFrame, presentationWindow)) return false;
     if (presentationWindowLocked || !WINDOW_RESIZE_DIRECTIONS.has(direction)
-      || mainWindow.isFullScreen() || mainWindow.isMaximized()) return false;
+      || presentationWindow.isFullScreen() || presentationWindow.isMaximized()) return false;
     const nativeCursor = screen.getCursorScreenPoint();
     windowResizeSession = {
       direction,
-      bounds: mainWindow.getBounds(),
+      bounds: presentationWindow.getBounds(),
       cursor: {
         x: Number.isFinite(cursor?.x) ? cursor.x : nativeCursor.x,
         y: Number.isFinite(cursor?.y) ? cursor.y : nativeCursor.y,
@@ -217,41 +263,45 @@ function registerProjectHandlers() {
   });
 
   ipcMain.handle('window:update-resize', (event, cursor) => {
-    if (!isMainWindowFrame(event.senderFrame, mainWindow) || !mainWindow || !windowResizeSession) return null;
+    if (!isMainWindowFrame(event.senderFrame, presentationWindow) || !windowResizeSession) return null;
     if (presentationWindowLocked || !Number.isFinite(cursor?.x) || !Number.isFinite(cursor?.y)) return null;
     const session = windowResizeSession;
     const bounds = resizeWindowBounds(
       session.bounds,
       { x: cursor.x - session.cursor.x, y: cursor.y - session.cursor.y },
       session.direction,
-      MAIN_WINDOW_MINIMUM_SIZE,
+      PRESENT_WINDOW_MINIMUM_SIZE,
     );
     // Windows constrains programmatic sizing while this transparent window is
     // natively non-resizable. Release that constraint for this trusted IPC update.
-    mainWindow.setMaximumSize(0, 0);
-    mainWindow.setBounds(bounds);
-    return { ...mainWindow.getBounds(), displayId: String(screen.getDisplayMatching(mainWindow.getBounds()).id) };
+    presentationWindow.setMaximumSize(0, 0);
+    presentationWindow.setBounds(bounds);
+    return { ...presentationWindow.getBounds(), displayId: String(screen.getDisplayMatching(presentationWindow.getBounds()).id) };
   });
 
   ipcMain.handle('window:end-resize', (event) => {
-    if (isMainWindowFrame(event.senderFrame, mainWindow)) finishWindowResize();
+    if (isMainWindowFrame(event.senderFrame, presentationWindow)) finishWindowResize();
   });
 
   ipcMain.handle('window:transparency', (event, value) => {
-    if (!isMainWindowFrame(event.senderFrame, mainWindow)) throw new Error('Only Freeform can change transparency.');
-    mainWindow?.setBackgroundColor(value ? '#00000000' : '#1f1f1f');
+    if (!canControlPresentation(event.senderFrame)) throw new Error('Only Freeform can change output transparency.');
+    presentationWindow?.setBackgroundColor(value ? '#00000000' : '#1f1f1f');
   });
 }
 
 function registerCaptureHandlers() {
-  ipcMain.handle('desktop:sources', async () => {
+  ipcMain.handle('desktop:sources', async (event) => {
+    if (!isTrustedMainFrame(event.senderFrame)) return [];
+    const excludedTitles = [mainWindow, presentationWindow]
+      .filter((window) => window && !window.isDestroyed())
+      .map((window) => window.getTitle());
     const sources = await desktopCapturer.getSources({
       types: ['window', 'screen'],
       thumbnailSize: { width: 360, height: 220 },
       fetchWindowIcons: true,
     });
     return sources
-      .filter((source) => !mainWindow || source.name !== mainWindow.getTitle())
+      .filter((source) => !excludedTitles.includes(source.name))
       .map((source) => ({
         id: source.id,
         name: source.name,
@@ -269,9 +319,9 @@ function registerCaptureHandlers() {
   }));
 
   ipcMain.handle('desktop:prepare', (event, id, withAudio) => {
-    if (!isMainWindowFrame(event.senderFrame, mainWindow)) throw new Error('Only Freeform can prepare desktop capture.');
+    if (!isTrustedMainFrame(event.senderFrame)) throw new Error('Only Freeform can prepare desktop capture.');
     if (typeof id !== 'string' || !id) throw new Error('A desktop source is required.');
-    pendingDesktopRequest = { id, withAudio: Boolean(withAudio) };
+    pendingDesktopRequests.set(event.senderFrame.frameTreeNodeId, { id, withAudio: Boolean(withAudio) });
   });
   ipcMain.handle('recording:state', (event) => recordings.getState(event));
   ipcMain.handle('recording:choose-directory', (event) => recordings.chooseDirectory(event));
@@ -284,16 +334,17 @@ function registerCaptureHandlers() {
   ipcMain.handle('recording:show-folder', (event) => recordings.showFolder(event));
 
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
-    callback(canUseMainWindowCapture(webContents, mainWindow, permission, details));
+    callback(canUseMainWindowCapture(webContents, [mainWindow, presentationWindow], permission, details));
   });
   session.defaultSession.setPermissionCheckHandler((webContents, permission, _origin, details) => {
-    return canUseMainWindowCapture(webContents, mainWindow, permission, details);
+    return canUseMainWindowCapture(webContents, [mainWindow, presentationWindow], permission, details);
   });
 
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
-    const requested = pendingDesktopRequest;
-    pendingDesktopRequest = null;
-    if (!requested || !isMainWindowFrame(request.frame, mainWindow)) {
+    const frameId = request.frame?.frameTreeNodeId;
+    const requested = pendingDesktopRequests.get(frameId);
+    pendingDesktopRequests.delete(frameId);
+    if (!requested || !isTrustedMainFrame(request.frame)) {
       callback(null);
       return;
     }
@@ -314,6 +365,31 @@ function registerCaptureHandlers() {
   });
 }
 
+async function loadRenderer(window, presentation = false) {
+  const rendererUrl = process.env.ELECTRON_RENDERER_URL;
+  if (rendererUrl) {
+    const url = new URL(rendererUrl);
+    if (presentation) url.searchParams.set('present', '1');
+    else url.searchParams.delete('present');
+    await window.loadURL(url.toString());
+    return;
+  }
+  await window.loadFile(
+    path.join(__dirname, '..', 'dist', 'index.html'),
+    presentation ? { query: { present: '1' } } : undefined,
+  );
+}
+
+function rendererPreferences() {
+  return {
+    preload: path.join(__dirname, 'preload.cjs'),
+    contextIsolation: true,
+    nodeIntegration: false,
+    sandbox: true,
+    webSecurity: true,
+  };
+}
+
 async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1500,
@@ -321,38 +397,65 @@ async function createWindow() {
     minWidth: MAIN_WINDOW_MINIMUM_SIZE[0],
     minHeight: MAIN_WINDOW_MINIMUM_SIZE[1],
     resizable: true,
+    frame: true,
     title: 'Freeform',
-    backgroundColor: '#00000000',
-    transparent: true,
+    backgroundColor: '#1f1f1f',
+    transparent: false,
     autoHideMenuBar: true,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true,
-    },
+    webPreferences: rendererPreferences(),
   });
 
-  mainWindow.on('will-move', (event) => {
-    if (presentationWindowLocked && !applyingWindowPlacement) event.preventDefault();
-  });
-  mainWindow.on('will-resize', (event) => {
-    if (presentationWindowLocked && !applyingWindowPlacement) event.preventDefault();
-  });
-
-  const rendererUrl = process.env.ELECTRON_RENDERER_URL;
-  if (rendererUrl) {
-    await mainWindow.loadURL(rendererUrl);
-  } else {
-    await mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
-  }
+  await loadRenderer(mainWindow);
   mainWindow.on('closed', () => {
+    presentationWindow?.close();
     finishWindowResize();
     presentationWindowLocked = false;
     presentationNormalPlacement = null;
+    presentationProject = null;
     mainWindow = null;
   });
+}
+
+async function createPresentationWindow() {
+  presentationWindow = new BrowserWindow({
+    width: 1280,
+    height: 720,
+    minWidth: PRESENT_WINDOW_MINIMUM_SIZE[0],
+    minHeight: PRESENT_WINDOW_MINIMUM_SIZE[1],
+    resizable: true,
+    frame: false,
+    show: false,
+    hasShadow: false,
+    title: 'Freeform Present',
+    backgroundColor: '#00000000',
+    transparent: true,
+    autoHideMenuBar: true,
+    webPreferences: rendererPreferences(),
+  });
+
+  presentationWindow.on('will-move', (event) => {
+    if (presentationWindowLocked && !applyingWindowPlacement) event.preventDefault();
+  });
+  presentationWindow.on('will-resize', (event) => {
+    if (presentationWindowLocked && !applyingWindowPlacement) event.preventDefault();
+  });
+  presentationWindow.on('closed', () => {
+    finishWindowResize();
+    presentationWindowLocked = false;
+    presentationNormalPlacement = null;
+    presentationProject = null;
+    presentationWindow = null;
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send('presentation:closed');
+    }
+  });
+
+  try {
+    await loadRenderer(presentationWindow, true);
+  } catch (error) {
+    presentationWindow?.close();
+    throw error;
+  }
 }
 
 app.whenReady().then(async () => {
