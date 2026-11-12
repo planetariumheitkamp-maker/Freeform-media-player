@@ -5,7 +5,6 @@ import type {
   OpenProjectResult,
   SaveProjectResult,
 } from '../types';
-import { verifyCustomSourceInBrowser } from './customSource';
 
 function fileMediaType(file: File): OpenedMedia['mediaType'] {
   if (file.type.startsWith('audio/')) return 'audio';
@@ -65,22 +64,6 @@ const browserBridge: FreeformBridge = {
   async prepareDesktopCapture() {
     // Browser capture uses the operating system picker directly.
   },
-  async openProviderCapture() {
-    throw new Error('Visible provider capture requires the Freeform desktop app.');
-  },
-  async setProviderAdBlockSettings() {
-    throw new Error('Provider-window request blocking requires the Freeform desktop app.');
-  },
-  async prepareProviderCapture() {
-    throw new Error('Visible provider capture requires the Freeform desktop app.');
-  },
-  async closeProviderCapture() {
-    // There is no provider window to close in the browser preview.
-  },
-  onProviderCaptureState() {
-    return () => {};
-  },
-  verifyCustomSource: verifyCustomSourceInBrowser,
   async getRecordingState() {
     return { directory: 'Available only in the Freeform desktop app' };
   },
@@ -88,13 +71,13 @@ const browserBridge: FreeformBridge = {
     throw new Error('Choose a recording folder in the Freeform desktop app.');
   },
   async startRecording() {
-    throw new Error('Sandbox recording requires the Freeform desktop app.');
+    throw new Error('Recording requires the Freeform desktop app.');
   },
   async appendRecording() {
-    throw new Error('Sandbox recording requires the Freeform desktop app.');
+    throw new Error('Recording requires the Freeform desktop app.');
   },
   async finishRecording() {
-    throw new Error('Sandbox recording requires the Freeform desktop app.');
+    throw new Error('Recording requires the Freeform desktop app.');
   },
   async discardRecording() {
     return { discarded: false };
@@ -170,13 +153,6 @@ async function captureDisplay(prepare: () => Promise<void>, withAudio: boolean):
 
 export function captureDesktop(sourceId: string, withAudio: boolean): Promise<MediaStream> {
   return captureDisplay(() => runtime.prepareDesktopCapture(sourceId, withAudio), withAudio);
-}
-
-export function captureProvider(captureId: string, withAudio: boolean): Promise<MediaStream> {
-  if (!captureId) {
-    return Promise.reject(new Error('Reopen the authorized Vidqueen window from Catalog or the verified custom-player window before reconnecting.'));
-  }
-  return captureDisplay(() => runtime.prepareProviderCapture(captureId, withAudio), withAudio);
 }
 
 export async function listCaptureDevices(requestPermission = false): Promise<MediaDeviceInfo[]> {

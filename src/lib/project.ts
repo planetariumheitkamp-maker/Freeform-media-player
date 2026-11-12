@@ -1,5 +1,4 @@
 import { TEST_SOURCE } from '../data/defaults';
-import { isCatalogSourceRef } from './catalog';
 import { DEFAULT_BACKGROUND_COLOR, isBackgroundColor, isPlayerVisual, normalizeBackgroundColor, normalizePlayerVisual } from './appearance';
 import { DEFAULT_GRID_GEOMETRY, normalizeGridGeometry } from './grid';
 import { DEFAULT_OUTPUT_SIZE, normalizeOutputOpacity, normalizeOutputSize } from './output';
@@ -7,7 +6,6 @@ import { isRenderQuality, normalizeRenderQuality } from './quality';
 import { DEFAULT_PLANETARIUM_SETTINGS, normalizePlanetariumSettings } from './dome';
 import { normalizeGroups } from './groups';
 import { DEFAULT_TRACE_SETTINGS, normalizeTraceSettings } from './traceSettings';
-import { isPlayerLiveEnhancement, normalizePlayerLiveEnhancement } from './liveEnhancement';
 import { DEFAULT_PRESENT_SETTINGS, normalizePresentSettings } from './present';
 import type { LinkGroup, MediaSource, Player, ProjectFile, RenderQuality, WorkspaceBackground, WorkspaceGridGeometryInput, WorkspaceOutputSize, WorkspacePlanetariumSettingsInput, WorkspacePresentSettingsInput, WorkspaceTraceSettingsInput } from '../types';
 
@@ -44,17 +42,12 @@ function isSource(value: unknown): value is MediaSource {
   if (!isRecord(value)) return false;
   return typeof value.id === 'string'
     && typeof value.name === 'string'
-    && ['test', 'file', 'stream', 'catalog', 'desktop', 'device', 'provider'].includes(String(value.kind))
+    && ['test', 'file', 'stream', 'desktop', 'device'].includes(String(value.kind))
     && ['video', 'audio', 'image', 'capture', 'test'].includes(String(value.mediaType))
     && typeof value.live === 'boolean'
     && typeof value.connected === 'boolean'
     && (value.uri === undefined || typeof value.uri === 'string')
-    && (value.path === undefined || typeof value.path === 'string')
-    && (value.providerCaptureId === undefined || typeof value.providerCaptureId === 'string')
-    && (value.providerUrl === undefined || typeof value.providerUrl === 'string')
-    && (value.providerKind === undefined || value.providerKind === 'vidqueen' || value.providerKind === 'builtin' || value.providerKind === 'custom')
-    && (value.providerName === undefined || typeof value.providerName === 'string')
-    && (value.catalog === undefined || isCatalogSourceRef(value.catalog));
+    && (value.path === undefined || typeof value.path === 'string');
 }
 
 function isBackground(value: unknown): value is WorkspaceBackground {
@@ -128,7 +121,6 @@ function isPlayer(value: unknown): value is Player {
   if (value.mediaRotation !== undefined && !isFiniteNumber(value.mediaRotation)) return false;
   if (value.mediaScale !== undefined && !isFiniteNumber(value.mediaScale)) return false;
   if (value.visual !== undefined && !isPlayerVisual(value.visual)) return false;
-  if (value.enhancement !== undefined && !isPlayerLiveEnhancement(value.enhancement)) return false;
   const booleanFields = ['muted', 'loop', 'visible', 'locked', 'autoplay'];
   if (!booleanFields.every((field) => typeof value[field] === 'boolean')) return false;
   if (value.domeWarp !== undefined && typeof value.domeWarp !== 'boolean') return false;
@@ -169,6 +161,43 @@ function isGroup(value: unknown): value is LinkGroup {
     && (value.mode === 'source' || value.mode === 'transport');
 }
 
+function migrateLegacyProject(value: Record<string, unknown>): void {
+  const sources = value.sources as unknown[];
+  const removedSourceIds = new Set<string>();
+  sources.forEach((source) => {
+    if (isRecord(source) && (source.kind === 'catalog' || source.kind === 'provider') && typeof source.id === 'string') {
+      removedSourceIds.add(source.id);
+    }
+  });
+  value.sources = sources.flatMap((source) => {
+    if (!isRecord(source)) return [source];
+    if (source.kind === 'catalog' || source.kind === 'provider') return [];
+    const migrated = { ...source };
+    ['providerCaptureId', 'providerUrl', 'providerKind', 'providerName', 'catalog'].forEach((field) => delete migrated[field]);
+    return [migrated];
+  });
+
+  const migratePlayer = (player: unknown): unknown => {
+    if (!isRecord(player)) return player;
+    const migrated = { ...player };
+    delete migrated.enhancement;
+    if (typeof migrated.sourceId === 'string' && removedSourceIds.has(migrated.sourceId)) {
+      migrated.sourceId = TEST_SOURCE.id;
+    }
+    return migrated;
+  };
+  value.players = (value.players as unknown[]).map(migratePlayer);
+
+  const present = value.present;
+  const lockedLayout = isRecord(present) ? present.lockedLayout : undefined;
+  if (isRecord(present) && isRecord(lockedLayout) && Array.isArray(lockedLayout.players)) {
+    value.present = {
+      ...present,
+      lockedLayout: { ...lockedLayout, players: lockedLayout.players.map(migratePlayer) },
+    };
+  }
+}
+
 export function parseProject(content: string): ProjectFile {
   let value: unknown;
   try {
@@ -186,6 +215,7 @@ export function parseProject(content: string): ProjectFile {
   if (value.sources.length > 500 || value.players.length > 200 || value.groups.length > 100) {
     throw new Error('The workspace exceeds the supported project size limits.');
   }
+  migrateLegacyProject(value);
   if (!value.sources.every(isSource)) throw new Error('The workspace contains an invalid media source.');
   if (!value.players.every(isPlayer)) throw new Error('The workspace contains an invalid player or mesh.');
   if (!value.groups.every(isGroup)) throw new Error('The workspace contains an invalid link group.');
@@ -228,7 +258,6 @@ export function parseProject(content: string): ProjectFile {
     mediaRotation: isFiniteNumber(player.mediaRotation) ? player.mediaRotation : 0,
     mediaScale: Math.max(0.1, Math.min(10, isFiniteNumber(player.mediaScale) ? player.mediaScale : 1)),
     visual: normalizePlayerVisual(isPlayerVisual(player.visual) ? player.visual : undefined),
-    enhancement: normalizePlayerLiveEnhancement(isPlayerLiveEnhancement(player.enhancement) ? player.enhancement : undefined),
     opacity: Math.max(0, Math.min(1, player.opacity)),
     volume: Math.max(0, Math.min(1, player.volume)),
     rate: Math.max(0.1, Math.min(4, player.rate)),
@@ -267,14 +296,6 @@ export function serializeProject(state: ProjectState): string {
     sources: state.sources.map((source) => {
       if (source.kind === 'file' && source.uri?.startsWith('data:')) return { ...source, connected: true };
       if (source.kind === 'file') return { ...source, uri: undefined, connected: false };
-      if (source.kind === 'provider') return {
-        ...source,
-        providerCaptureId: undefined,
-        connected: false,
-        detail: source.providerKind === 'custom'
-          ? 'Reopen and verify the custom player from Sources → Custom to reconnect this live source.'
-          : `Reopen the authorized ${source.providerName || 'provider'} window from Catalog to reconnect this live source.`,
-      };
       if (source.live) return { ...source, connected: false };
       return source;
     }),

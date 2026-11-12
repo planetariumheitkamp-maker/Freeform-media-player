@@ -18,7 +18,6 @@ import {
   Save,
   Search,
   Shapes,
-  Sparkles,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -34,7 +33,6 @@ const TOPIC_ICONS: Record<string, LucideIcon> = {
   output: Maximize2,
   grids: Grid2X2,
   appearance: Palette,
-  'live-ai': Sparkles,
   present: MonitorPlay,
   planetarium: Orbit,
   calibration: Crosshair,
@@ -167,9 +165,9 @@ export function FeatureGuideDialog({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="feature-guide-body">
-          <aside className="feature-guide-catalog" aria-label="Feature guide topics">
-            <div className="feature-guide-catalog-heading"><span>FEATURE DIRECTORY</span><span>{filteredTopics.length} / {FEATURE_GUIDE_TOPICS.length}</span></div>
-            <div className="feature-guide-catalog-scroll scrollable">
+          <aside className="feature-guide-directory" aria-label="Feature guide topics">
+            <div className="feature-guide-directory-heading"><span>FEATURE DIRECTORY</span><span>{filteredTopics.length} / {FEATURE_GUIDE_TOPICS.length}</span></div>
+            <div className="feature-guide-directory-scroll scrollable">
               {categories.map((category) => (
                 <section key={category} className="feature-guide-category">
                   <h3>{category}</h3>
@@ -198,7 +196,7 @@ export function FeatureGuideDialog({ onClose }: { onClose: () => void }) {
                 <div className="feature-guide-empty"><Search size={22} /><strong>No matching features</strong><span>Try “dome”, “trace”, “save”, or “color”.</span></div>
               )}
             </div>
-            <div className="feature-guide-catalog-note"><span>WORKSPACE GUIDE</span><strong>Instructions matched to this build</strong></div>
+            <div className="feature-guide-directory-note"><span>WORKSPACE GUIDE</span><strong>Instructions matched to this build</strong></div>
           </aside>
 
           <article ref={readingRef} className="feature-guide-reading scrollable">

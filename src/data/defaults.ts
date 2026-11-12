@@ -1,5 +1,4 @@
 import { DEFAULT_PLAYER_VISUAL } from '../lib/appearance';
-import { DEFAULT_PLAYER_LIVE_ENHANCEMENT } from '../lib/liveEnhancement';
 import type { MediaSource, Player, Vec2 } from '../types';
 
 export const WORKSPACE_WIDTH = 1600;
@@ -41,7 +40,6 @@ export function createPlayer(index: number, sourceId = TEST_SOURCE.id): Player {
     mediaRotation: 0,
     mediaScale: 1,
     visual: { ...DEFAULT_PLAYER_VISUAL },
-    enhancement: { ...DEFAULT_PLAYER_LIVE_ENHANCEMENT },
     opacity: 1,
     volume: 0.8,
     muted: false,

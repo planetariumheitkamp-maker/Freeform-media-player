@@ -1,12 +1,10 @@
-import { BookOpen, Clapperboard, FolderOpen, History, Library, Package, PanelTopClose, Play, Redo2, Save, ShieldCheck, Undo2 } from 'lucide-react';
+import { BookOpen, FolderOpen, History, Library, Package, PanelTopClose, Play, Redo2, Save, ShieldCheck, Undo2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { OPEN_PROVIDER_DASHBOARD_EVENT } from '../lib/customProviders';
 import { useGuideTarget } from '../lib/guideActions';
 import { createPortableProject, parseProject, reauthorizeProjectBackground, reauthorizeProjectFiles, serializeProject } from '../lib/project';
 import { runtime } from '../lib/runtime';
 import { useWorkspace } from '../store/useWorkspace';
 import type { ProjectFile } from '../types';
-import { CatalogDialog } from './CatalogDialog';
 import { FeatureGuideDialog } from './FeatureGuideDialog';
 import { useMedia } from './MediaContext';
 import { HistoryDialog } from './HistoryDialog';
@@ -26,20 +24,7 @@ export function TopBar({ onMinimizeAll, onPresent }: { onMinimizeAll: () => void
   const [historyOpen, setHistoryOpen] = useState(false);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
-  const [catalogOpen, setCatalogOpen] = useState(false);
-  const [requestedProviderId, setRequestedProviderId] = useState<string | null>(null);
   const { stopStream } = useMedia();
-
-  useEffect(() => {
-    const openProvider = (event: Event) => {
-      const providerId = (event as CustomEvent<{ providerId?: unknown }>).detail?.providerId;
-      if (typeof providerId !== 'string') return;
-      setRequestedProviderId(providerId);
-      setCatalogOpen(true);
-    };
-    window.addEventListener(OPEN_PROVIDER_DASHBOARD_EVENT, openProvider);
-    return () => window.removeEventListener(OPEN_PROVIDER_DASHBOARD_EVENT, openProvider);
-  }, []);
 
   const restoreProject = useCallback(async (project: ProjectFile, title: string) => {
     useWorkspace.getState().sources.filter((source) => source.live).forEach((source) => stopStream(source.id));
@@ -127,7 +112,7 @@ export function TopBar({ onMinimizeAll, onPresent }: { onMinimizeAll: () => void
       <header className="top-bar">
         <div className="brand">
           <svg viewBox="0 0 34 34" aria-hidden="true"><path d="M3 7 28 3 31 27 7 31Z" /><path d="m3 7 14 10L28 3M17 17l14 10M17 17 7 31" /></svg>
-          <div><strong>FREEFORM</strong><span>LIVE AI · EXPERIMENTAL</span></div>
+          <div><strong>FREEFORM</strong><span>MEDIA WITHOUT STRAIGHT EDGES</span></div>
         </div>
         <div className="project-title">
           <span className="save-indicator" />
@@ -139,7 +124,6 @@ export function TopBar({ onMinimizeAll, onPresent }: { onMinimizeAll: () => void
           <button className="icon-button" aria-label="Redo" title="Redo (Ctrl+Y)" disabled={!canRedo} onClick={() => useWorkspace.getState().redo()}><Redo2 size={15} /></button>
           <button data-guide-target="history" className="icon-button" aria-label="Edit history" title="Edit history" onClick={() => setHistoryOpen(true)}><History size={15} /></button>
           <button data-guide-target="recovery" className="icon-button" aria-label="Recovery and diagnostics" title="Recovery & diagnostics" onClick={() => setRecoveryOpen(true)}><ShieldCheck size={15} /></button>
-          <button className="button subtle catalog-top-button" aria-label="Catalog" title="Choose an external media provider" onClick={() => { setRequestedProviderId(null); setCatalogOpen(true); }}><Clapperboard size={14} /><span>Catalog</span></button>
           <button data-guide-target="saves" className="button subtle" onClick={() => setSavedWorkspacesOpen(true)}><Library size={14} />Saves</button>
           <button className="button subtle" onClick={() => void openFromFile()}><FolderOpen size={14} />Open</button>
           <button className="button subtle" onClick={() => void saveToFile()}><Save size={14} />Save file</button>
@@ -149,7 +133,6 @@ export function TopBar({ onMinimizeAll, onPresent }: { onMinimizeAll: () => void
           <button data-guide-target="present" className="button primary" onClick={onPresent}><Play size={14} />Present</button>
         </div>
       </header>
-      {catalogOpen && <CatalogDialog initialProviderId={requestedProviderId} onClose={() => { setRequestedProviderId(null); setCatalogOpen(false); }} />}
       {guideOpen && <FeatureGuideDialog onClose={() => setGuideOpen(false)} />}
       {historyOpen && <HistoryDialog onClose={() => setHistoryOpen(false)} />}
       {recoveryOpen && <RecoveryDialog onClose={() => setRecoveryOpen(false)} onRestore={restoreProject} />}

@@ -1,6 +1,6 @@
 {
   "name": "freeform-media-player",
-  "version": "0.2.0-live-ai.0",
+  "version": "0.2.0",
   "description": "Cross-platform free-form media compositor with live GPU mesh warping and selectable link groups.",
   "main": "electron/main.js",
   "type": "module",
@@ -8,11 +8,8 @@
   "author": "Heitkamp Planetarium",
   "license": "MIT",
   "scripts": {
-    "predev": "node scripts/prepare-ai-runtime.mjs",
-    "predev:browser": "node scripts/prepare-ai-runtime.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:browser": "vite --host 127.0.0.1",
-    "prebuild": "node scripts/prepare-ai-runtime.mjs",
     "build": "tsc --noEmit && vite build",
     "start": "electron .",
     "pack": "npm run build && electron-builder --dir --publish never",
@@ -20,9 +17,6 @@
     "test": "vitest run",
     "test:e2e": "npm run build && playwright test",
     "test:desktop": "node scripts/verify-packaged.mjs",
-    "test:desktop-ai": "node scripts/verify-packaged-live-ai.mjs",
-    "test:provider-capture": "npm run build && node scripts/verify-provider-capture.mjs",
-    "test:custom-recording": "npm run build && node scripts/verify-custom-recording.mjs",
     "test:present": "npm run build && node scripts/verify-present-interactive.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
@@ -32,7 +26,6 @@
     "cdt2d": "^1.0.0",
     "hls.js": "^1.7.3",
     "lucide-react": "^1.61.0",
-    "onnxruntime-web": "1.21.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "three": "^0.186.1",
@@ -55,8 +48,8 @@
     "wait-on": "^9.5.1"
   },
   "build": {
-    "appId": "org.freeform.mediaplayer.liveai",
-    "productName": "Freeform Live AI",
+    "appId": "org.freeform.mediaplayer",
+    "productName": "Freeform",
     "directories": {
       "output": "release"
     },
@@ -68,7 +61,7 @@
       "THIRD_PARTY_NOTICES.md"
     ],
     "asar": true,
-    "artifactName": "Freeform-Live-AI-${version}-${os}-${arch}.${ext}",
+    "artifactName": "Freeform-${version}-${os}-${arch}.${ext}",
     "win": {
       "target": [
         "nsis",

@@ -61,16 +61,16 @@ export function RecordingsDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Dialog title="Recording library" eyebrow="PLAYER CAPTURE / WEBM" onClose={onClose}>
+    <Dialog title="Recording library" eyebrow="LOCAL MEDIA / WEBM" onClose={onClose}>
       <div className="recording-library-toolbar">
         <button type="button" className="button subtle" disabled={!runtime.isDesktop} onClick={() => void chooseDirectory()}><FolderOpen size={14} />Choose save folder</button>
         <button type="button" className="button subtle" disabled={!runtime.isDesktop} onClick={() => void runtime.showRecordingFolder().catch((cause) => setError(cause instanceof Error ? cause.message : 'The folder could not be opened.'))}><HardDrive size={14} />Open folder</button>
         <button type="button" className="icon-button" aria-label="Refresh recordings" disabled={loading || !runtime.isDesktop} onClick={() => void refresh()}><RefreshCw size={15} className={loading ? 'spin' : ''} /></button>
       </div>
       <div className="recording-library-directory"><span>SAVE FOLDER</span><code>{directory || 'Desktop app required'}</code></div>
-      {!runtime.isDesktop && <p className="form-help">Player-window recording and the recording library require the Freeform desktop app. Existing local WebM files can still be added through Files.</p>}
+      {!runtime.isDesktop && <p className="form-help">The recording library requires the Freeform desktop app. Existing local WebM files can still be added through Files.</p>}
       {error && <p className="form-error" role="alert">{error}</p>}
-      {runtime.isDesktop && !loading && !recordings.length && <div className="recording-library-empty"><Video size={27} /><strong>No recordings in this folder</strong><p>Open a provider player window, choose Record window, then Stop & save.</p></div>}
+      {runtime.isDesktop && !loading && !recordings.length && <div className="recording-library-empty"><Video size={27} /><strong>No recordings in this folder</strong><p>Choose a folder containing existing WebM recordings, or add local WebM files through Files.</p></div>}
       <div className="recording-library-list">
         {recordings.map((recording) => (
           <article key={recording.path} className="recording-library-row">

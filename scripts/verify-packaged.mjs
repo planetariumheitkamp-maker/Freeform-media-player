@@ -176,27 +176,15 @@ try {
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   checks.push('Players, dome settings, dome toggles, circular grid, and High quality survive reload.');
 
-  await page.getByRole('button', { name: 'Catalog', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Providers', exact: true })).toBeVisible();
-  await expect(page.getByRole('combobox', { name: 'Provider', exact: true })).toHaveValue('vidqueen');
-  await expect(page.locator('.catalog-card, .provider-row, .catalog-shell iframe')).toHaveCount(0);
-  await page.getByLabel('TMDB ID', { exact: true }).fill('603');
-  await page.getByLabel(/I confirm I am authorized/).check();
-  await page.context().route('https://vidqueen.st/**', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'text/html',
-      body: '<!doctype html><html><body style="background:#101311;color:#c5ffc3"><strong>PACKAGED MOCK PROVIDER</strong></body></html>',
-    });
-  });
-  const providerWindowEvent = electronApp.waitForEvent('window', { timeout: 30_000 });
-  await page.getByRole('button', { name: 'Open player window', exact: true }).click();
-  const providerPage = await providerWindowEvent;
-  await expect(providerPage).toHaveURL('https://vidqueen.st/embed/movie/603?autoplay=false');
-  await expect(providerPage.getByText('PACKAGED MOCK PROVIDER')).toBeVisible();
-  await providerPage.close();
-  await page.getByRole('button', { name: 'Close Catalog', exact: true }).click();
-  checks.push('The provider-only Catalog opens an authorized Vidqueen TMDB movie in a mocked dedicated window in the packaged app.');
+  await expect(page.getByRole('button', { name: 'Catalog', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Custom / verify', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Live AI', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Files', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Stream', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Screen', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Device', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Recordings', exact: true })).toBeVisible();
+  checks.push('Removed Catalog, custom verification, and Live AI controls are absent; core source controls remain.');
 
   await page.locator('.warp-workspace').screenshot({
     path: path.join(outputDirectory, 'desktop-planetarium.png'),

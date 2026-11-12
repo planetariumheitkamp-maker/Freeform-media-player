@@ -42,6 +42,25 @@ async function linkTwoPlayers(page: Page) {
   await expect(page.locator('.group-controls')).toBeVisible();
 }
 
+test('removed integrations stay absent while core sources remain available', async ({ page }, testInfo) => {
+  const assertNoRuntimeErrors = monitorRuntimeErrors(page);
+  await page.goto('/');
+  await expect(page.locator('canvas.warp-canvas')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Catalog', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Custom / verify', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Live AI', { exact: true })).toHaveCount(0);
+  for (const name of ['Files', 'Stream', 'Screen', 'Device', 'Recordings']) {
+    await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
+  }
+  await page.screenshot({ path: testInfo.outputPath('simplified-workspace.png'), animations: 'disabled' });
+  await page.getByRole('button', { name: 'Guide', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'What would you like to do?', exact: true })).toBeVisible();
+  await expect(page.getByText('Live AI', { exact: false })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('simplified-guide.png'), animations: 'disabled' });
+  await page.keyboard.press('Escape');
+  assertNoRuntimeErrors();
+});
+
 test('perspective editing, advanced nodes, and selected-subset grouping', async ({ page }) => {
   const assertNoRuntimeErrors = monitorRuntimeErrors(page);
   await page.goto('/');

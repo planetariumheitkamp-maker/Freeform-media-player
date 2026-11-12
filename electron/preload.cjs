@@ -8,17 +8,6 @@ contextBridge.exposeInMainWorld('freeform', {
   authorizeMedia: (paths) => ipcRenderer.invoke('media:authorize', paths),
   listDesktopSources: () => ipcRenderer.invoke('desktop:sources'),
   prepareDesktopCapture: (id, withAudio) => ipcRenderer.invoke('desktop:prepare', id, withAudio),
-  openProviderCapture: (input) => ipcRenderer.invoke('provider:open', input),
-  setProviderAdBlockSettings: (settings) => ipcRenderer.invoke('provider:set-ad-block', settings),
-  prepareProviderCapture: (id, withAudio) => ipcRenderer.invoke('provider:prepare', id, withAudio),
-  closeProviderCapture: (id) => ipcRenderer.invoke('provider:close', id),
-  onProviderCaptureState: (callback) => {
-    if (typeof callback !== 'function') return () => {};
-    const listener = (_event, state) => callback(state);
-    ipcRenderer.on('provider:capture-state', listener);
-    return () => ipcRenderer.removeListener('provider:capture-state', listener);
-  },
-  verifyCustomSource: (input) => ipcRenderer.invoke('custom:verify', input),
   getRecordingState: () => ipcRenderer.invoke('recording:state'),
   chooseRecordingDirectory: () => ipcRenderer.invoke('recording:choose-directory'),
   startRecording: (input) => ipcRenderer.invoke('recording:start', input),

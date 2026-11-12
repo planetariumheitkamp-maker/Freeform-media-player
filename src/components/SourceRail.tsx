@@ -6,7 +6,6 @@ import {
   FilePlus2,
   Film,
   Grid2X2,
-  Globe2,
   Image,
   Library,
   Link2,
@@ -29,13 +28,12 @@ import { listCaptureDevices, runtime } from '../lib/runtime';
 import { connectLiveSource, sourceFromFile } from '../lib/sourceActions';
 import { useWorkspace } from '../store/useWorkspace';
 import type { MediaSource, MediaType } from '../types';
-import { CustomSourceDialog } from './CustomSourceDialog';
 import { Dialog } from './Dialog';
 import { useMedia } from './MediaContext';
 import { RecordingsDialog } from './RecordingsDialog';
 
 function SourceIcon({ source, size = 15 }: { source: MediaSource; size?: number }) {
-  if (source.kind === 'desktop' || source.kind === 'provider') return <Monitor size={size} />;
+  if (source.kind === 'desktop') return <Monitor size={size} />;
   if (source.kind === 'device') return <Camera size={size} />;
   if (source.kind === 'stream') return <Radio size={size} />;
   if (source.kind === 'test') return <Grid2X2 size={size} />;
@@ -44,7 +42,7 @@ function SourceIcon({ source, size = 15 }: { source: MediaSource; size?: number 
   return <Film size={size} />;
 }
 
-type DialogName = 'stream' | 'custom' | 'recordings' | 'desktop' | 'device' | null;
+type DialogName = 'stream' | 'recordings' | 'desktop' | 'device' | null;
 
 export function SourceRail({ onMinimize }: { onMinimize: () => void }) {
   const sources = useWorkspace((state) => state.sources);
@@ -261,7 +259,6 @@ export function SourceRail({ onMinimize }: { onMinimize: () => void }) {
           <button onClick={() => void openDevices()}><Camera size={15} /><span>Device</span></button>
         </div>
         <div className="source-utility-actions">
-          <button className="button subtle" onClick={() => setDialog('custom')}><Globe2 size={13} /><span>Custom / verify</span></button>
           <button className="button subtle" onClick={() => setDialog('recordings')}><Library size={13} /><span>Recordings</span></button>
         </div>
         <button className="button subtle full-width relink-button" disabled={!sources.some((source) => source.kind === 'file' && !source.connected)} onClick={() => void relinkMissing()}><RefreshCw size={13} />Relink missing media</button>
@@ -296,11 +293,6 @@ export function SourceRail({ onMinimize }: { onMinimize: () => void }) {
                       onClick={(event) => {
                         event.stopPropagation();
                         stopStream(source.id);
-                        if (source.kind === 'provider' && source.providerCaptureId
-                          && !sources.some((candidate) => candidate.id !== source.id
-                            && candidate.providerCaptureId === source.providerCaptureId)) {
-                          void runtime.closeProviderCapture(source.providerCaptureId).catch(() => undefined);
-                        }
                         removeSource(source.id);
                       }}
                     ><Trash2 size={12} /></button>
@@ -410,7 +402,6 @@ export function SourceRail({ onMinimize }: { onMinimize: () => void }) {
           {!loading && !devices.length && !dialogError && <p className="form-help">No video input devices were reported.</p>}
         </Dialog>
       )}
-      {dialog === 'custom' && <CustomSourceDialog onClose={() => setDialog(null)} />}
       {dialog === 'recordings' && <RecordingsDialog onClose={() => setDialog(null)} />}
     </aside>
   );

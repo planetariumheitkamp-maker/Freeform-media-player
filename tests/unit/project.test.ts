@@ -100,6 +100,66 @@ describe('project persistence', () => {
     }))).toThrow('invalid player or mesh');
   });
 
+  it('migrates legacy external sources and enhancement settings without losing local workspace data', () => {
+    const local = localSource();
+    const catalogPlayer = {
+      ...createPlayer(1, 'source:legacy-catalog'),
+      enhancement: { enabled: true, model: 'legacy-model' },
+    };
+    const providerPlayer = {
+      ...createPlayer(2, 'source:legacy-provider'),
+      enhancement: { enabled: true, model: 'legacy-model' },
+    };
+    const localPlayer = {
+      ...createPlayer(3, local.id),
+      enhancement: { enabled: true, model: 'legacy-model' },
+    };
+    const lockedPlayer = {
+      ...createPlayer(4, 'source:legacy-provider'),
+      enhancement: { enabled: true, model: 'legacy-model' },
+    };
+    const project = parseProject(JSON.stringify({
+      format: 'freeform-workspace',
+      version: 1,
+      name: 'Migrated legacy workspace',
+      sources: [
+        TEST_SOURCE,
+        local,
+        {
+          id: 'source:legacy-catalog', kind: 'catalog', mediaType: 'video', name: 'Bundled demo',
+          uri: '/catalog/media/demo.webm', live: false, connected: true,
+          catalog: { playbackMode: 'native', itemId: 'demo' },
+        },
+        {
+          id: 'source:legacy-provider', kind: 'provider', mediaType: 'capture', name: 'External player',
+          live: true, connected: true, providerCaptureId: 'temporary-window',
+          providerUrl: 'https://player.example.com/embed/42', providerKind: 'custom', providerName: 'Legacy custom',
+        },
+      ],
+      players: [catalogPlayer, providerPlayer, localPlayer],
+      groups: [],
+      backgroundColor: '#26352d',
+      gridSnapping: true,
+      output: { width: 2048, height: 1152 },
+      present: {
+        layoutLocked: true,
+        lockedLayout: { players: [lockedPlayer], output: { width: 2048, height: 1152 } },
+      },
+    }));
+
+    expect(project.sources.map((source) => source.id)).toEqual([TEST_SOURCE.id, local.id]);
+    expect(project.sources[1]).toMatchObject({ kind: 'file', path: local.path, name: local.name });
+    expect(project.players.map((player) => player.sourceId)).toEqual([TEST_SOURCE.id, TEST_SOURCE.id, local.id]);
+    expect(project.players.every((player) => !('enhancement' in player))).toBe(true);
+    expect(project.present?.lockedLayout?.players[0].sourceId).toBe(TEST_SOURCE.id);
+    expect(project.present?.lockedLayout?.players.every((player) => !('enhancement' in player))).toBe(true);
+    expect(project.backgroundColor).toBe('#26352d');
+    expect(project.gridSnapping).toBe(true);
+    expect(project.output).toEqual({ width: 2048, height: 1152 });
+    expect(JSON.stringify(project)).not.toContain('providerCaptureId');
+    expect(JSON.stringify(project)).not.toContain('legacy-model');
+  });
+
   it('rejects malformed projects and oversized meshes', () => {
     expect(() => parseProject('{}')).toThrow('not a supported');
     const player = createPlayer(1);

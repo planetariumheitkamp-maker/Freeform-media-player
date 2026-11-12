@@ -15,7 +15,6 @@ export const GUIDE_TARGETS = [
   'present',
   'media-appearance',
   'color-light',
-  'live-ai',
   'planetarium-setup',
   'planetarium-calibration',
   'planetarium-installation',

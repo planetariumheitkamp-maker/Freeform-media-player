@@ -2,18 +2,18 @@ import { app, dialog, shell } from 'electron';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { isMainWindowFrame } from './providerCaptureRules.js';
+import { isMainWindowFrame } from './windowSecurity.js';
 
 function timestamp() {
   return new Date().toISOString().replace(/[:.]/g, '-');
 }
 
 function safeLabel(value) {
-  return String(value || 'Sandbox recording')
+  return String(value || 'Freeform recording')
     .replace(/[\\/:*?"<>|]/g, '-')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 80) || 'Sandbox recording';
+    .slice(0, 80) || 'Freeform recording';
 }
 
 export function createRecordingController({ getMainWindow, describeFile }) {

@@ -325,49 +325,6 @@ export const FEATURE_GUIDE_TOPICS: readonly FeatureGuideTopic[] = [
     ],
   },
   {
-    id: 'live-ai',
-    category: 'Shape media',
-    title: 'Live AI sharpness prototype',
-    summary: 'Enhance compatible non-live video with Real-ESRGAN while preserving a safe original-video fallback.',
-    overview: [
-      'Live AI is an experimental per-player enhancement path for non-live video sources. It processes a reduced AI input and produces a 4× enhanced frame for the player renderer.',
-      'The engine drops late frames to protect playback. If processing is busy, late, unavailable, or still loading, the original video remains visible instead of freezing the presentation on an unfinished result.',
-    ],
-    note: 'AI enhancement cannot guarantee more real detail or better perceived quality for every source. Test compression artifacts, text, noise, latency, and frame rate on the actual GPU before using it in a presentation.',
-    steps: [
-      {
-        title: 'Confirm the source is compatible',
-        detail: 'Select a player using a non-live video file or compatible network video. Images, audio, and live capture continue to use their original media.',
-        bullets: ['The toggle is disabled for unsupported source types.', 'Enhancement is configured independently on each player unless you batch-edit.', 'Start with a short representative clip for evaluation.'],
-        action: { label: 'Show Live AI controls', target: 'live-ai' },
-      },
-      {
-        title: 'Enable enhancement and allow model setup',
-        detail: 'Turn on Live AI enhancement. The first use downloads and verifies the approximately 4.9 MB model; later uses can load it from cache.',
-        bullets: ['Keep the network available for the initial model download.', 'The status panel reports loading, running, fallback, and error states.', 'No enhanced frame is required for the original video to remain visible.'],
-        action: { label: 'Show Live AI controls', target: 'live-ai' },
-      },
-      {
-        title: 'Balance input size and strength',
-        detail: 'Start with 480 px balanced input, then compare 320 px for speed or 640 px for potential detail. Adjust strength while inspecting the picture.',
-        bullets: ['Larger AI inputs generally cost more processing time.', 'Higher strength can emphasize artifacts as well as detail.', 'Use the same frames and projection settings when making comparisons.'],
-        action: { label: 'Show Live AI controls', target: 'live-ai' },
-      },
-      {
-        title: 'Read runtime status and frame cost',
-        detail: 'Watch the enhancement status and Last processed frame measurement while video plays.',
-        bullets: ['Late results are intentionally dropped to protect playback timing.', 'Pause to allow a complete enhanced frame for close inspection.', 'Reduce input size or disable enhancement if the workload is unsuitable.'],
-        action: { label: 'Show Live AI controls', target: 'live-ai' },
-      },
-      {
-        title: 'Validate the complete presentation path',
-        detail: 'Test AI together with output quality, mesh warp, color adjustments, and dome warp on the presentation computer.',
-        bullets: ['Combined GPU workloads can change performance substantially.', 'Compare against the original source rather than assuming enhancement is preferable.', 'Save the working configuration and retain a fallback with AI disabled.'],
-        action: { label: 'Open Output controls', target: 'output' },
-      },
-    ],
-  },
-  {
     id: 'present',
     category: 'Present & dome',
     title: 'Present mode, floating controls & live media',
@@ -392,7 +349,7 @@ export const FEATURE_GUIDE_TOPICS: readonly FeatureGuideTopic[] = [
       },
       {
         title: 'Switch players and manage media during Present',
-        detail: 'Open Players to select, add, hide, lock, or link players. Open Media to assign a source to the active player, add files or streams, start screen/device capture, use a custom source or recording, and reconnect media.',
+        detail: 'Open Players to select, add, hide, lock, or link players. Open Media to assign a source to the active player, add files or streams, start screen/device capture, open a saved recording, and reconnect media.',
         bullets: ['The active player has the mint left edge; source assignment also reaches members of its link group.', 'Disconnected files use Reconnect or replace media. On desktop, saved paths are authorized directly; the browser asks for the file again. Relink missing media matches several files by filename.', 'Escape closes an open media dialog without leaving Present. Use the heading’s minimize arrow or H to hide the library and return to the unobstructed canvas.'],
         action: { label: 'Open Present mode', target: 'present' },
       },
@@ -636,7 +593,7 @@ export const FEATURE_GUIDE_TOPICS: readonly FeatureGuideTopic[] = [
       },
       {
         title: 'Use the feature guide with a keyboard',
-        detail: 'Open Guide, Tab to the feature catalog, choose a topic, then use Previous step and Next step to follow its walkthrough.',
+        detail: 'Open Guide, Tab to the feature directory, choose a topic, then use Previous step and Next step to follow its walkthrough.',
         bullets: ['The search field filters topics by feature, concept, or instruction text.', 'Open controls buttons close the guide and reveal the real destination.', 'Escape, the close button, and the backdrop all close the guide.'],
         action: { label: 'Open Planetarium calibration', target: 'planetarium-calibration' },
       },

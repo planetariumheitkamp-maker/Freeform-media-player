@@ -10,11 +10,11 @@ vi.mock('electron', () => ({
   dialog: { showOpenDialog: vi.fn() },
   shell: { openPath: vi.fn().mockResolvedValue('') },
 }));
-vi.mock('../../electron/providerCaptureRules.js', () => ({
+vi.mock('../../electron/windowSecurity.js', () => ({
   isMainWindowFrame: (frame: any, window: any) => frame?.owner === window && !window?.destroyed,
 }));
 
-describe('sandbox recording files', () => {
+describe('local recording files', () => {
   let controller: ReturnType<typeof createRecordingController>;
   let mainWindow: any;
   let event: any;

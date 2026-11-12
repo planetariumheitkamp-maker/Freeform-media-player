@@ -1,5 +1,4 @@
 node_modules/
-public/ort/
 dist/
 release/
 release-*/
@@ -9,6 +8,8 @@ out/
 Thumbs.db
 playwright-report/
 test-results/
+artifacts/
+tmp/
 verification/
 coverage/
 .env

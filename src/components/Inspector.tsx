@@ -11,13 +11,11 @@ import {
   Unlock,
   Eye,
   EyeOff,
-  Sparkles,
 } from 'lucide-react';
 import { DEFAULT_PLAYER_VISUAL, normalizePlayerVisual } from '../lib/appearance';
-import { normalizePlayerLiveEnhancement } from '../lib/liveEnhancement';
 import { selectionBounds } from '../lib/workflow';
 import { useWorkspace } from '../store/useWorkspace';
-import type { LiveEnhancementInputSize, PlayerVisualSettings } from '../types';
+import type { PlayerVisualSettings } from '../types';
 
 function VisualRangeField({ label, field, value, min, max, step, display, onChange }: {
   label: string;
@@ -74,7 +72,6 @@ export function Inspector({ onMinimize }: { onMinimize: () => void }) {
   const selectedNodes = useWorkspace((state) => state.selectedNodes);
   const tool = useWorkspace((state) => state.tool);
   const planetariumEnabled = useWorkspace((state) => state.planetariumSettings.enabled);
-  const enhancementStatus = useWorkspace((state) => activeId ? state.liveEnhancementStatus[activeId] : undefined);
   const updatePlayer = useWorkspace((state) => state.updatePlayer);
   const updatePlayers = useWorkspace((state) => state.updatePlayers);
   const movePlayers = useWorkspace((state) => state.movePlayers);
@@ -112,8 +109,6 @@ export function Inspector({ onMinimize }: { onMinimize: () => void }) {
   const selectedNodeId = selectedNodes[active.id]?.length === 1 ? selectedNodes[active.id][0] : null;
   const selectedNode = active.nodes.find((node) => node.id === selectedNodeId);
   const visual = normalizePlayerVisual(active.visual);
-  const enhancement = normalizePlayerLiveEnhancement(active.enhancement);
-  const canEnhance = source?.mediaType === 'video' && !source.live;
   const edit = (patch: Parameters<typeof updatePlayer>[1]) => {
     if (selectedIds.length > 1) updatePlayers(selectedIds, patch);
     else updatePlayer(active.id, patch);
@@ -282,61 +277,6 @@ export function Inspector({ onMinimize }: { onMinimize: () => void }) {
         </div>
         <p className="section-help">Rotate or resize only the media. The player shape, mesh nodes, position, and transform stay unchanged.</p>
         <button className="button subtle full-width" onClick={() => edit({ mediaRotation: 0, mediaScale: 1 })}><RotateCcw size={13} />Reset media transform</button>
-      </section>
-
-      <section className="inspector-section live-enhancement-section" data-guide-target="live-ai">
-        <div className="inspector-heading"><Sparkles size={12} />LIVE SHARPNESS / AI PROTOTYPE</div>
-        <label className="check-field live-enhancement-toggle">
-          <input
-            type="checkbox"
-            aria-label="Live AI enhancement"
-            checked={canEnhance && enhancement.enabled}
-            disabled={!canEnhance}
-            onChange={(event) => edit({ enhancement: { ...enhancement, enabled: event.target.checked } })}
-          />
-          Live AI enhancement
-        </label>
-        <label className="range-field">
-          <span>Enhancement strength <output>{Math.round(enhancement.strength * 100)}%</output></span>
-          <input
-            aria-label="Enhancement strength"
-            type="range"
-            min="0"
-            max="1"
-            step="0.05"
-            value={enhancement.strength}
-            disabled={!canEnhance || !enhancement.enabled}
-            onChange={(event) => edit({ enhancement: { ...enhancement, strength: Number(event.target.value) } })}
-          />
-        </label>
-        <label className="select-field">
-          <span>AI input size</span>
-          <select
-            aria-label="AI input size"
-            value={enhancement.inputSize}
-            disabled={!canEnhance || !enhancement.enabled}
-            onChange={(event) => edit({ enhancement: { ...enhancement, inputSize: Number(event.target.value) as LiveEnhancementInputSize } })}
-          >
-            <option value={320}>320 px · fastest</option>
-            <option value={480}>480 px · balanced</option>
-            <option value={640}>640 px · most detail</option>
-          </select>
-        </label>
-        {canEnhance ? (
-          <>
-            <div className={`live-enhancement-status ${enhancementStatus?.phase ?? 'off'}`} role="status">
-              <strong>{enhancement.enabled ? (enhancementStatus?.phase ?? 'loading').toUpperCase() : 'OFF'}</strong>
-              <span>{enhancement.enabled ? enhancementStatus?.detail ?? 'Preparing live AI…' : 'Original video is displayed.'}</span>
-            </div>
-            {enhancementStatus?.inferenceMs !== undefined && enhancement.enabled && (
-              <div className="property-inline"><span>Last processed frame</span><strong>{Math.round(enhancementStatus.inferenceMs)} ms</strong></div>
-            )}
-            <p className="section-help">Real-ESRGAN detail enhancement at 4× the AI input resolution. The first use downloads and verifies a 4.9 MB model; later uses load it from cache.</p>
-            <p className="section-help">Late frames are dropped to protect playback. If AI is busy, late, or unavailable, the original video remains visible. Pause to allow a full enhanced frame.</p>
-          </>
-        ) : (
-          <p className="section-help">Available for file, stream, and test video sources. Images, audio, and live capture continue to use their original media.</p>
-        )}
       </section>
 
       <section className="inspector-section" data-guide-target="color-light">

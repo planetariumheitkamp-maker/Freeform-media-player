@@ -16,7 +16,7 @@ function topicText(topic: (typeof FEATURE_GUIDE_TOPICS)[number]): string {
 
 describe('interactive feature guide content', () => {
   it('provides a unique, substantive walkthrough for every major workflow', () => {
-    expect(FEATURE_GUIDE_TOPICS.length).toBeGreaterThanOrEqual(13);
+    expect(FEATURE_GUIDE_TOPICS.length).toBeGreaterThanOrEqual(12);
     expect(new Set(FEATURE_GUIDE_TOPICS.map((topic) => topic.id)).size).toBe(FEATURE_GUIDE_TOPICS.length);
     expect(new Set(FEATURE_GUIDE_TOPICS.map((topic) => topic.title)).size).toBe(FEATURE_GUIDE_TOPICS.length);
 

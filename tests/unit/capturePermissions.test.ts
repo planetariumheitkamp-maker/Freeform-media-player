@@ -32,7 +32,7 @@ describe('main-window capture permissions', () => {
     expect(canUseMainWindowCapture(owner, null, 'media', mainFrame)).toBe(false);
   });
 
-  it('denies provider subframes even though they share the main webContents ID', () => {
+  it('denies non-main frames even when they share the main webContents ID', () => {
     const owner = contents(7);
     expect(canUseMainWindowCapture(owner, windowWith(owner), 'display-capture', { isMainFrame: false })).toBe(false);
     expect(canUseMainWindowCapture(owner, windowWith(owner), 'display-capture', undefined)).toBe(false);

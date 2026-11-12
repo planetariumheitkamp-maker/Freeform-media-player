@@ -14,9 +14,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { canUseMainWindowCapture } from './capturePermissions.js';
-import { createProviderCaptureController } from './providerCaptureWindow.js';
-import { isMainWindowFrame } from './providerCaptureRules.js';
-import { verifyCustomSource } from './customSourceVerification.js';
+import { isMainWindowFrame } from './windowSecurity.js';
 import { createRecordingController } from './recordings.js';
 import { resizeWindowBounds, resolveWindowPlacement, WINDOW_RESIZE_DIRECTIONS } from './presentationWindow.js';
 
@@ -42,20 +40,7 @@ function getMainWindowPlacement() {
   return { ...bounds, displayId: String(display.id) };
 }
 
-const providerCapture = createProviderCaptureController({
-  getMainWindow: () => mainWindow,
-  emit: (state) => {
-    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
-      mainWindow.webContents.send('provider:capture-state', state);
-    }
-  },
-});
 const recordings = createRecordingController({ getMainWindow: () => mainWindow, describeFile });
-
-// The desktop app hosts trusted local UI code. Allow its sandboxed AI worker to
-// use a bounded WASM thread pool without requiring cross-origin isolation for
-// user-supplied remote media, which may not provide Cross-Origin-Resource-Policy.
-app.commandLine.appendSwitch('enable-features', 'SharedArrayBuffer');
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -286,19 +271,7 @@ function registerCaptureHandlers() {
   ipcMain.handle('desktop:prepare', (event, id, withAudio) => {
     if (!isMainWindowFrame(event.senderFrame, mainWindow)) throw new Error('Only Freeform can prepare desktop capture.');
     if (typeof id !== 'string' || !id) throw new Error('A desktop source is required.');
-    providerCapture.cancelPending();
     pendingDesktopRequest = { id, withAudio: Boolean(withAudio) };
-  });
-  ipcMain.handle('provider:open', (event, input) => providerCapture.open(event, input));
-  ipcMain.handle('provider:set-ad-block', (event, settings) => providerCapture.setAdBlock(event, settings));
-  ipcMain.handle('provider:prepare', (event, id, withAudio) => {
-    pendingDesktopRequest = null;
-    providerCapture.prepare(event, id, withAudio);
-  });
-  ipcMain.handle('provider:close', (event, id) => providerCapture.close(event, id));
-  ipcMain.handle('custom:verify', async (event, input) => {
-    if (!isMainWindowFrame(event.senderFrame, mainWindow)) throw new Error('Only Freeform can verify custom sources.');
-    return verifyCustomSource(input);
   });
   ipcMain.handle('recording:state', (event) => recordings.getState(event));
   ipcMain.handle('recording:choose-directory', (event) => recordings.chooseDirectory(event));
@@ -318,7 +291,6 @@ function registerCaptureHandlers() {
   });
 
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
-    if (providerCapture.handleDisplayRequest(request, callback)) return;
     const requested = pendingDesktopRequest;
     pendingDesktopRequest = null;
     if (!requested || !isMainWindowFrame(request.frame, mainWindow)) {
@@ -349,7 +321,7 @@ async function createWindow() {
     minWidth: MAIN_WINDOW_MINIMUM_SIZE[0],
     minHeight: MAIN_WINDOW_MINIMUM_SIZE[1],
     resizable: true,
-    title: 'Freeform Live AI — Prototype',
+    title: 'Freeform',
     backgroundColor: '#00000000',
     transparent: true,
     autoHideMenuBar: true,
@@ -379,7 +351,6 @@ async function createWindow() {
     finishWindowResize();
     presentationWindowLocked = false;
     presentationNormalPlacement = null;
-    providerCapture.closeAll();
     mainWindow = null;
   });
 }
