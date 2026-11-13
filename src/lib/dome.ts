@@ -226,6 +226,45 @@ export function domeScreenToDirection(
   }, -radians(settings.tilt));
 }
 
+function domeOrientationReferencePosition(
+  player: Player,
+  outputSize: WorkspaceOutputSize,
+  gridGeometry: WorkspaceGridGeometry,
+  settings: WorkspacePlanetariumSettings,
+): Vec2 {
+  if (player.domeOrientationReference === 'center') return { x: 0, y: 0 };
+  const point = settings.calibrationPoints.find((candidate) => candidate.id === player.domeOrientationReference);
+  if (!point) return { x: 0, y: 0 };
+  return domeWorldToPosition(
+    domeDirectionToScreen(domeAzimuthElevation(point.azimuth, point.elevation), outputSize, gridGeometry, settings),
+    outputSize,
+    gridGeometry,
+    settings,
+  );
+}
+
+export function domePlayerRotation(
+  player: Player,
+  outputSize: WorkspaceOutputSize,
+  gridGeometry: WorkspaceGridGeometry,
+  settings: WorkspacePlanetariumSettings,
+): number {
+  if (player.domeOrientation === 'manual') return player.rotation;
+  const reference = domeOrientationReferencePosition(player, outputSize, gridGeometry, settings);
+  const deltaX = reference.x - player.position.x;
+  const deltaY = reference.y - player.position.y;
+  if (Math.hypot(deltaX, deltaY) <= 1e-9) return player.rotation;
+  const direction = Math.atan2(deltaY, deltaX);
+  const baseRotation = player.domeOrientation === 'top-toward'
+    ? direction - Math.PI / 2
+    : player.domeOrientation === 'top-away'
+      ? direction + Math.PI / 2
+      : player.domeOrientation === 'right-away'
+        ? direction + Math.PI
+        : direction;
+  return baseRotation + player.rotation;
+}
+
 export function domeLocalToWorld(
   player: Player,
   point: Vec2,
@@ -235,8 +274,9 @@ export function domeLocalToWorld(
 ): Vec2 {
   const radius = domeRadius(outputSize, gridGeometry);
   const frame = centerFrame(player.position, radius, settings);
-  const cosine = Math.cos(player.rotation);
-  const sine = Math.sin(player.rotation);
+  const rotation = domePlayerRotation(player, outputSize, gridGeometry, settings);
+  const cosine = Math.cos(rotation);
+  const sine = Math.sin(rotation);
   const localX = point.x * player.scale;
   const localY = point.y * player.scale;
   const offsetX = (localX * cosine - localY * sine) / radius;
@@ -262,8 +302,9 @@ export function domeWorldToLocal(
   if (Math.abs(denominator) < 1e-8) return { x: Number.NaN, y: Number.NaN };
   const offsetX = radius * dot(direction, frame.basisX) / denominator;
   const offsetY = radius * dot(direction, frame.basisY) / denominator;
-  const cosine = Math.cos(-player.rotation);
-  const sine = Math.sin(-player.rotation);
+  const rotation = domePlayerRotation(player, outputSize, gridGeometry, settings);
+  const cosine = Math.cos(-rotation);
+  const sine = Math.sin(-rotation);
   return {
     x: (offsetX * cosine - offsetY * sine) / player.scale,
     y: (offsetX * sine + offsetY * cosine) / player.scale,

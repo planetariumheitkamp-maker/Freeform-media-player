@@ -54,6 +54,8 @@ export function createPlayer(index: number, sourceId = TEST_SOURCE.id): Player {
     autoplay: true,
     domeWarp: false,
     domePrewarped: false,
+    domeOrientation: 'manual',
+    domeOrientationReference: 'center',
   };
 }
 

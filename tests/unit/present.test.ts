@@ -28,6 +28,8 @@ function changedPlayer(player: Player): Player {
     mediaScale: 1.2,
     domeWarp: !player.domeWarp,
     domePrewarped: !player.domePrewarped,
+    domeOrientation: 'right-away',
+    domeOrientationReference: 'current-reference',
     quickCorners: player.quickCorners.map((point) => ({ x: point.x * 1.3, y: point.y * 1.3 })) as Player['quickCorners'],
   };
 }
@@ -93,6 +95,8 @@ describe('Present layout and ambient preferences', () => {
   it('restores only geometry and preserves current source, playback, appearance, and individual locks', () => {
     const original = createPlayer(1);
     original.domeWarp = true;
+    original.domeOrientation = 'top-toward';
+    original.domeOrientationReference = 'locked-reference';
     const current = changedPlayer(original);
     const snapshot = capturePresentLayout([original], { width: 1920, height: 1080 });
     original.position.x = 10000;
@@ -114,9 +118,22 @@ describe('Present layout and ambient preferences', () => {
       mediaScale: current.mediaScale,
       domeWarp: true,
       domePrewarped: false,
+      domeOrientation: 'top-toward',
+      domeOrientationReference: 'locked-reference',
     });
     expect(restored.players[0].quickCorners).not.toBe(snapshot.players[0].quickCorners);
     expect(restorePresentLayout([current], { width: 1600, height: 900 }, null).players[0]).toBe(current);
+  });
+
+  it('defaults orientation in legacy locked layouts', () => {
+    const snapshot = capturePresentLayout([createPlayer(1)], { width: 1600, height: 900 });
+    const current = { ...createPlayer(1), id: snapshot.players[0].id, domeOrientation: 'right-toward' as const, domeOrientationReference: 'current-reference' };
+    const locked = snapshot.players[0] as Partial<Player>;
+    delete locked.domeOrientation;
+    delete locked.domeOrientationReference;
+    const restored = restorePresentLayout([current], { width: 1600, height: 900 }, snapshot);
+    expect(restored.players[0].domeOrientation).toBe('manual');
+    expect(restored.players[0].domeOrientationReference).toBe('center');
   });
 
   it('prevents locked Present dragging and restores captured geometry on re-entry', () => {

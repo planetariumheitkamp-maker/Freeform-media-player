@@ -86,6 +86,8 @@ export function restorePresentLayout(
         border: [...locked.border],
         domeWarp: locked.domeWarp,
         domePrewarped: locked.domePrewarped,
+        domeOrientation: locked.domeOrientation ?? 'manual',
+        domeOrientationReference: locked.domeOrientationReference ?? 'center',
       };
     }),
     output: { ...snapshot.output },

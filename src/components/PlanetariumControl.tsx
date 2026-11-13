@@ -216,12 +216,12 @@ export function PlanetariumControl() {
                 </div>
                 <p className="section-help">Truncation is the angular cap mapped to the fisheye rim: 100% uses the full field of view; 75% at 180° FOV produces a 135° cap. Offsets are percentages of output dimensions.</p>
                 <div className="property-inline"><span>Active dome-warped players</span><strong>{warpedPlayers} of {players.length}</strong></div>
-                <p className="section-help">Enable <strong>Dome warp</strong> per player in the Inspector. <strong>Already prewarped</strong> bypasses this second warp while retaining the player’s ordinary mesh.</p>
+                <p className="section-help">Enable <strong>Dome warp</strong> per player in the Inspector. Choose a grid-facing mode there to aim the player’s top or right side toward or away from the grid center or a named calibration reference. Rotation then becomes a fine offset. <strong>Already prewarped</strong> bypasses this second warp while retaining the player’s ordinary mesh.</p>
               </>
             )}
             {tab === 'calibration' && (
               <>
-                <p className="form-help">Enter known sky directions, then drag the yellow observed points to their measured output pixels. Hollow green points show the current prediction; lines show residuals.</p>
+                <p className="form-help">Enter known sky directions, then drag the yellow observed points to their measured output pixels. Hollow green points show the current prediction; lines show residuals. Give each point a distinct name to use it as an orientation reference in a player’s Inspector. Editing its azimuth or elevation retargets players that reference it; observed pixels are used only for calibration.</p>
                 <CalibrationPlot settings={settings} onChange={setCalibrationPoints} />
                 <div className="calibration-add-row">
                   <PlanetariumNumberField label="Reference azimuth" value={azimuth} min={-180} max={180} step={1} onChange={setAzimuth} />
@@ -232,7 +232,8 @@ export function PlanetariumControl() {
                   {settings.calibrationPoints.map((point) => (
                     <div className="calibration-point-row" key={point.id}>
                       <input aria-label={`${point.name} name`} value={point.name} onChange={(event) => updateCalibrationPoint(point.id, { name: event.target.value })} />
-                      <span>{point.azimuth.toFixed(1)}° / {point.elevation.toFixed(1)}°</span>
+                      <label>Az <input type="number" aria-label={`${point.name} azimuth`} min={-180} max={180} step={1} value={point.azimuth} onChange={(event) => updateCalibrationPoint(point.id, { azimuth: Number(event.target.value) })} /></label>
+                      <label>El <input type="number" aria-label={`${point.name} elevation`} min={0} max={90} step={1} value={point.elevation} onChange={(event) => updateCalibrationPoint(point.id, { elevation: Number(event.target.value) })} /></label>
                       <label>X <input type="number" aria-label={`${point.name} observed X`} value={Math.round(point.observed.x)} onChange={(event) => updateCalibrationPoint(point.id, { observed: { ...point.observed, x: Number(event.target.value) } })} /></label>
                       <label>Y <input type="number" aria-label={`${point.name} observed Y`} value={Math.round(point.observed.y)} onChange={(event) => updateCalibrationPoint(point.id, { observed: { ...point.observed, y: Number(event.target.value) } })} /></label>
                       <button className="icon-button" aria-label={`Remove ${point.name}`} onClick={() => setCalibrationPoints(settings.calibrationPoints.filter((candidate) => candidate.id !== point.id))}><Trash2 size={13} /></button>

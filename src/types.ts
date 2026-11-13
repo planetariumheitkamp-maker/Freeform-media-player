@@ -6,6 +6,7 @@ export type EditorMode = 'quick' | 'advanced';
 export type TestPatternKind = 'orientation' | 'crosshatch' | 'starfield' | 'convergence' | 'latitude';
 export type DomeProjectionModel = 'equidistant' | 'equisolid' | 'stereographic';
 export type DomePreviewMode = 'projector' | 'unwarped' | 'audience';
+export type DomeOrientationMode = 'manual' | 'top-toward' | 'top-away' | 'right-toward' | 'right-away';
 
 export interface Vec2 {
   x: number;
@@ -72,6 +73,8 @@ export interface Player {
   autoplay: boolean;
   domeWarp: boolean;
   domePrewarped: boolean;
+  domeOrientation: DomeOrientationMode;
+  domeOrientationReference: string;
 }
 
 export interface WorkspaceBackground {

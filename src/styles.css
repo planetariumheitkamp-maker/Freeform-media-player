@@ -454,7 +454,7 @@ button.history-entry:hover { background: rgba(197, 255, 195, .04); color: var(--
 .calibration-add-row { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 10px; margin: 12px 0; }
 .calibration-add-row .button { height: 29px; }
 .calibration-points { max-height: 225px; overflow-y: auto; border-top: 1px solid var(--line-soft); }
-.calibration-point-row { display: grid; grid-template-columns: minmax(90px, 1fr) 92px 100px 100px 28px; align-items: center; gap: 7px; min-height: 40px; border-bottom: 1px solid var(--line-soft); }
+.calibration-point-row { display: grid; grid-template-columns: minmax(90px, 1fr) 64px 64px 88px 88px 28px; align-items: center; gap: 7px; min-height: 40px; border-bottom: 1px solid var(--line-soft); }
 .calibration-point-row > input, .calibration-point-row label input { width: 100%; min-width: 0; height: 26px; padding: 0 5px; border: 1px solid var(--line); background: #1f211f; font-size: 9px; }
 .calibration-point-row > span, .calibration-point-row label { color: var(--dim); font-family: 'Fira Mono', monospace; font-size: 8px; }
 .calibration-point-row label { display: flex; align-items: center; gap: 4px; }

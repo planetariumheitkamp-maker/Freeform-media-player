@@ -124,6 +124,9 @@ function isPlayer(value: unknown): value is Player {
   const booleanFields = ['muted', 'loop', 'visible', 'locked', 'autoplay'];
   if (!booleanFields.every((field) => typeof value[field] === 'boolean')) return false;
   if (value.domeWarp !== undefined && typeof value.domeWarp !== 'boolean') return false;
+  if (value.domeOrientation !== undefined
+    && !['manual', 'top-toward', 'top-away', 'right-toward', 'right-away'].includes(String(value.domeOrientation))) return false;
+  if (value.domeOrientationReference !== undefined && typeof value.domeOrientationReference !== 'string') return false;
   if (!Array.isArray(value.nodes) || !Array.isArray(value.border)) return false;
   if (value.nodes.length > 2000 || !value.border.every((id) => typeof id === 'string')) return false;
   return value.nodes.every((node) => isRecord(node)
@@ -263,6 +266,8 @@ export function parseProject(content: string): ProjectFile {
     rate: Math.max(0.1, Math.min(4, player.rate)),
     domeWarp: player.domeWarp === true,
     domePrewarped: player.domePrewarped === true,
+    domeOrientation: player.domeOrientation ?? 'manual',
+    domeOrientationReference: player.domeOrientationReference ?? 'center',
   }));
   const normalized = normalizeGroups(players, value.groups);
 

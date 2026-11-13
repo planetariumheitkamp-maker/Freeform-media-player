@@ -371,7 +371,7 @@ describe('project persistence', () => {
     const content = serializeProject({
       projectName: 'Dome study',
       sources: [TEST_SOURCE],
-      players: [{ ...createPlayer(1), domeWarp: true }],
+      players: [{ ...createPlayer(1), domeWarp: true, domeOrientation: 'top-toward', domeOrientationReference: 'front-reference' }],
       groups: [],
       planetariumSettings: { enabled: true, fov: 160, tilt: 12, offsetX: -8, offsetY: 15 },
     });
@@ -382,10 +382,14 @@ describe('project persistence', () => {
     });
     expect(project.players[0].domeWarp).toBe(true);
     expect(project.players[0].domePrewarped).toBe(false);
+    expect(project.players[0].domeOrientation).toBe('top-toward');
+    expect(project.players[0].domeOrientationReference).toBe('front-reference');
 
     const legacyPlayer: Record<string, unknown> = { ...createPlayer(1) };
     delete legacyPlayer.domeWarp;
     delete legacyPlayer.domePrewarped;
+    delete legacyPlayer.domeOrientation;
+    delete legacyPlayer.domeOrientationReference;
     const legacy = JSON.stringify({
       format: 'freeform-workspace', version: 1, name: 'Legacy dome', sources: [TEST_SOURCE],
       players: [legacyPlayer], groups: [],
@@ -393,6 +397,8 @@ describe('project persistence', () => {
     const legacyProject = parseProject(legacy);
     expect(legacyProject.players[0].domeWarp).toBe(false);
     expect(legacyProject.players[0].domePrewarped).toBe(false);
+    expect(legacyProject.players[0].domeOrientation).toBe('manual');
+    expect(legacyProject.players[0].domeOrientationReference).toBe('center');
     expect(legacyProject.planetarium).toEqual(DEFAULT_PLANETARIUM_SETTINGS);
 
     const clamped = parseProject(JSON.stringify({
@@ -408,6 +414,12 @@ describe('project persistence', () => {
     }))).toThrow('invalid planetarium settings');
     expect(() => parseProject(JSON.stringify({
       ...JSON.parse(legacy), players: [{ ...createPlayer(1), domeWarp: 'yes' }],
+    }))).toThrow('invalid player or mesh');
+    expect(() => parseProject(JSON.stringify({
+      ...JSON.parse(legacy), players: [{ ...createPlayer(1), domeOrientation: 'sideways' }],
+    }))).toThrow('invalid player or mesh');
+    expect(() => parseProject(JSON.stringify({
+      ...JSON.parse(legacy), players: [{ ...createPlayer(1), domeOrientationReference: 42 }],
     }))).toThrow('invalid player or mesh');
   });
 });

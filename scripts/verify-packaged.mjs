@@ -134,7 +134,10 @@ try {
   const unwarpedFrame = await canvas.evaluate((element) => element.toDataURL());
   await domeToggle.check();
   await expectCanvasChange(unwarpedFrame, 'Dome warp');
-  checks.push('Planetarium controls and per-player dome warp change packaged rendering.');
+  const unwarpedOrientationFrame = await canvas.evaluate((element) => element.toDataURL());
+  await page.getByLabel('Grid-relative orientation', { exact: true }).selectOption('top-toward');
+  await expectCanvasChange(unwarpedOrientationFrame, 'Grid-relative orientation');
+  checks.push('Planetarium controls, per-player dome warp, and grid-facing orientation change packaged rendering.');
 
   await page.locator('.player-actions button').first().click();
   await expect(page.locator('.player-row')).toHaveCount(2);
@@ -228,6 +231,14 @@ try {
   await expect(outputCanvas).toHaveAttribute('data-render-quality', 'high');
   await expect(outputCanvas).toHaveAttribute('data-background-color', '#28445f');
   checks.push('Present creates a separate read-only output while the native editor and all ordinary controls remain.');
+
+  const beforeOutputOrientation = await outputCanvas.evaluate((element) => element.toDataURL());
+  await page.getByLabel('Grid-relative orientation', { exact: true }).selectOption('right-away');
+  await expect.poll(() => outputCanvas.evaluate((element) => element.toDataURL()), { timeout: 30_000 }).not.toBe(beforeOutputOrientation);
+  const outputOrientation = await outputPage.evaluate(async () => JSON.parse(await window.freeform.getPresentationProject()));
+  assert.equal(outputOrientation.players[0].domeOrientation, 'right-away');
+  assert.equal(outputOrientation.players[0].domeOrientationReference, 'center');
+  checks.push('Grid-facing orientation changes in the native editor synchronize to the separate Present canvas and project.');
 
   const beforeOutputEdit = await outputCanvas.evaluate((element) => element.toDataURL());
   await setInput('input[data-visual-field="brightness"]', 1.6);

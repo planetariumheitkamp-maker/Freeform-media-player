@@ -15,7 +15,7 @@ import {
 import { DEFAULT_PLAYER_VISUAL, normalizePlayerVisual } from '../lib/appearance';
 import { selectionBounds } from '../lib/workflow';
 import { useWorkspace } from '../store/useWorkspace';
-import type { PlayerVisualSettings } from '../types';
+import type { DomeOrientationMode, PlayerVisualSettings } from '../types';
 
 function VisualRangeField({ label, field, value, min, max, step, display, onChange }: {
   label: string;
@@ -71,7 +71,7 @@ export function Inspector({ onMinimize }: { onMinimize: () => void }) {
   const selectedIds = useWorkspace((state) => state.selectedIds);
   const selectedNodes = useWorkspace((state) => state.selectedNodes);
   const tool = useWorkspace((state) => state.tool);
-  const planetariumEnabled = useWorkspace((state) => state.planetariumSettings.enabled);
+  const planetariumSettings = useWorkspace((state) => state.planetariumSettings);
   const updatePlayer = useWorkspace((state) => state.updatePlayer);
   const updatePlayers = useWorkspace((state) => state.updatePlayers);
   const movePlayers = useWorkspace((state) => state.movePlayers);
@@ -222,8 +222,41 @@ export function Inspector({ onMinimize }: { onMinimize: () => void }) {
           <NumberField label="X" value={active.position.x} onChange={(x) => moveAxis('x', x)} />
           <NumberField label="Y" value={active.position.y} onChange={(y) => moveAxis('y', y)} />
           <NumberField label="Scale" value={active.scale} min={0.05} max={20} step={0.05} onChange={(scale) => edit({ scale: Math.max(0.05, Math.min(20, scale)) })} suffix="×" />
-          <NumberField label="Rotation" value={active.rotation * 180 / Math.PI} step={1} onChange={(degrees) => edit({ rotation: degrees * Math.PI / 180 })} suffix="°" />
+          <NumberField label={active.domeOrientation === 'manual' ? 'Rotation' : 'Rotation offset'} value={active.rotation * 180 / Math.PI} step={1} onChange={(degrees) => edit({ rotation: degrees * Math.PI / 180 })} suffix="°" />
         </div>
+        <label className="field-label">Grid-relative orientation
+          <select
+            className="full-select"
+            aria-label="Grid-relative orientation"
+            value={active.domeOrientation}
+            disabled={!planetariumSettings.enabled || !active.domeWarp || active.domePrewarped}
+            onChange={(event) => edit({ domeOrientation: event.target.value as DomeOrientationMode })}
+          >
+            <option value="manual">Manual</option>
+            <option value="top-toward">Top toward point</option>
+            <option value="top-away">Top away from point</option>
+            <option value="right-toward">Right side toward point</option>
+            <option value="right-away">Right side away from point</option>
+          </select>
+        </label>
+        <label className="field-label">Orientation reference point
+          <select
+            className="full-select"
+            aria-label="Orientation reference point"
+            value={active.domeOrientationReference}
+            disabled={!planetariumSettings.enabled || !active.domeWarp || active.domePrewarped || active.domeOrientation === 'manual'}
+            onChange={(event) => edit({ domeOrientationReference: event.target.value })}
+          >
+            <option value="center">Grid center</option>
+            {active.domeOrientationReference !== 'center'
+              && !planetariumSettings.calibrationPoints.some((point) => point.id === active.domeOrientationReference)
+              && <option value={active.domeOrientationReference}>Missing reference (uses grid center)</option>}
+            {planetariumSettings.calibrationPoints.map((point) => <option key={point.id} value={point.id}>{point.name}</option>)}
+          </select>
+        </label>
+        <p className="section-help">{active.domeOrientation === 'manual'
+          ? 'Manual uses Rotation alone. Choose a facing mode to orient this player relative to a point on the circular grid.'
+          : 'Facing follows the selected grid reference. Rotation offset fine-tunes the result. Create named references in Planetarium → Calibration; a missing reference falls back to the grid center.'}</p>
         <label className="range-field"><span>Opacity <output>{Math.round(active.opacity * 100)}%</output></span><input type="range" min="0" max="1" step="0.01" value={active.opacity} onChange={(event) => edit({ opacity: Number(event.target.value) })} /></label>
         <div className="toggle-row">
           <button className={!active.visible ? 'active' : ''} onClick={() => edit({ visible: !active.visible })}>{active.visible ? <Eye size={13} /> : <EyeOff size={13} />}{active.visible ? 'Visible' : 'Hidden'}</button>
@@ -234,7 +267,7 @@ export function Inspector({ onMinimize }: { onMinimize: () => void }) {
             type="checkbox"
             aria-label="Dome warp"
             checked={active.domeWarp}
-            disabled={!planetariumEnabled || active.domePrewarped}
+            disabled={!planetariumSettings.enabled || active.domePrewarped}
             onChange={(event) => edit({ domeWarp: event.target.checked })}
           />
           Dome warp
@@ -250,7 +283,7 @@ export function Inspector({ onMinimize }: { onMinimize: () => void }) {
         </label>
         <p className="section-help">{active.domePrewarped
           ? 'Projection bypass is active. This media renders without a second dome warp.'
-          : planetariumEnabled
+          : planetariumSettings.enabled
             ? 'Project this player’s media onto the dome using the circular grid and fisheye settings.'
             : 'Enable Planetarium mode to make per-player dome warping available.'}</p>
       </section>

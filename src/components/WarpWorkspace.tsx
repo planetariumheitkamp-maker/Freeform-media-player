@@ -13,6 +13,7 @@ import {
 import {
   domeCenter,
   domeLocalToWorld,
+  domePlayerRotation,
   domeRadius,
   domeWorldToLocal,
   domeWorldToPosition,
@@ -631,7 +632,7 @@ export function WarpWorkspace() {
       const size = outputSizeRef.current;
       const grid = gridGeometryRef.current;
       return JSON.stringify([
-        player.position.x, player.position.y, player.rotation, player.scale,
+        player.position.x, player.position.y, domePlayerRotation(player, size, grid, settings), player.scale,
         settings.model, settings.truncation, settings.fov, settings.tilt, settings.offsetX, settings.offsetY,
         size.width, size.height, grid.radius, grid.rotation,
       ]);

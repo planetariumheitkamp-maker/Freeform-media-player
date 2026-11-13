@@ -362,7 +362,7 @@ export const FEATURE_GUIDE_TOPICS: readonly FeatureGuideTopic[] = [
       {
         title: 'Lock the layout and output window',
         detail: 'Arrange the players and output window, then choose Layout + window in the editor. Freeform captures this geometry and normal output placement, restores them on subsequent Present sessions, and prevents output movement and resizing.',
-        bullets: ['The snapshot includes player position, rotation, scale, mesh, dome switches, and output size; it preserves current media assignments, playback, appearance, and individual player locks.', 'Only the frameless output is locked. The native editor retains its ordinary Windows minimize, maximize, resize, and close behavior.', 'Unlock to make a new arrangement, then lock again to replace the snapshot. A disconnected monitor falls back to a connected display with clamped bounds.'],
+        bullets: ['The snapshot includes player position, rotation, scale, mesh, dome switches, grid-facing mode and reference, and output size; it preserves current media assignments, playback, appearance, and individual player locks.', 'Only the frameless output is locked. The native editor retains its ordinary Windows minimize, maximize, resize, and close behavior.', 'Unlock to make a new arrangement, then lock again to replace the snapshot. A disconnected monitor falls back to a connected display with clamped bounds.'],
         action: { label: 'Open Present mode', target: 'present' },
       },
       {
@@ -424,6 +424,12 @@ export const FEATURE_GUIDE_TOPICS: readonly FeatureGuideTopic[] = [
         title: 'Enable Dome warp per player',
         detail: 'Close Planetarium, select each intended player, and enable Dome warp under Transform in the Inspector.',
         bullets: ['Media already prewarped bypasses a second dome warp while retaining the ordinary mesh.', 'Do not enable both an external prewarp and a second Freeform warp unintentionally.', 'The Setup panel reports how many players are actively dome-warped.'],
+        action: { label: 'Open Planetarium setup', target: 'planetarium-setup' },
+      },
+      {
+        title: 'Face players toward a grid reference',
+        detail: 'In the Inspector’s Transform section, choose a grid-relative orientation and a reference point. Automatic facing keeps the media upright relative to the selected direction as you move the player.',
+        bullets: ['Aim the player’s top or right side toward or away from the grid center or a named point.', 'Create and name reference points in Planetarium → Calibration; their known azimuth and elevation determine facing, not observed pixels.', 'Rotation becomes a fine offset in automatic mode. Select Manual to use Rotation alone.', 'Orientation is available only while Planetarium is enabled and this player has Dome warp enabled without a prewarp bypass.'],
         action: { label: 'Open Planetarium setup', target: 'planetarium-setup' },
       },
       {

@@ -261,6 +261,68 @@ test('dome presets, lens models, and prewarped bypass persist without a second w
   assertNoRuntimeErrors();
 });
 
+test('grid-relative player orientation follows named references and survives reload', async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
+  const assertNoRuntimeErrors = monitorRuntimeErrors(page);
+  await page.goto('/');
+  const canvas = page.locator('canvas.warp-canvas');
+  await expect(canvas).toBeVisible();
+  const orientation = page.getByLabel('Grid-relative orientation', { exact: true });
+  const reference = page.getByLabel('Orientation reference point', { exact: true });
+  await expect(orientation).toBeDisabled();
+  await openPlanetarium(page);
+  await page.getByLabel('Enable planetarium mode', { exact: true }).check();
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.getByLabel('Dome warp', { exact: true }).check();
+  await expect(orientation).toBeEnabled();
+  await expect(reference).toBeDisabled();
+  await settleRender(page);
+  let previousFrame = await canvasFrame(page);
+
+  for (const mode of ['top-toward', 'top-away', 'right-toward', 'right-away']) {
+    await orientation.selectOption(mode);
+    await expect.poll(() => canvasFrame(page)).not.toBe(previousFrame);
+    previousFrame = await canvasFrame(page);
+  }
+  await page.getByLabel('Rotation offset', { exact: true }).fill('25');
+  await expect.poll(() => canvasFrame(page)).not.toBe(previousFrame);
+  previousFrame = await canvasFrame(page);
+
+  await openPlanetarium(page);
+  await page.getByRole('tab', { name: 'Calibration', exact: true }).click();
+  await page.getByRole('button', { name: 'Add reference', exact: true }).click();
+  await page.getByLabel('Point 1 name', { exact: true }).fill('Front');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await reference.selectOption({ label: 'Front' });
+  await expect.poll(() => canvasFrame(page)).not.toBe(previousFrame);
+  previousFrame = await canvasFrame(page);
+  const pointId = (await readProject(page)).planetarium.calibrationPoints[0].id;
+  await expect.poll(async () => (await readProject(page)).players[0].domeOrientationReference).toBe(pointId);
+
+  await openPlanetarium(page);
+  await page.getByRole('tab', { name: 'Calibration', exact: true }).click();
+  await page.getByLabel('Front azimuth', { exact: true }).fill('90');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect.poll(() => canvasFrame(page)).not.toBe(previousFrame);
+  await expect.poll(async () => (await readProject(page)).planetarium.calibrationPoints[0].azimuth).toBe(90);
+
+  await page.reload();
+  await expect(canvas).toBeVisible();
+  await expect(orientation).toHaveValue('right-away');
+  await expect(reference).toHaveValue(pointId);
+  await expect(page.getByLabel('Rotation offset', { exact: true })).toHaveValue('25');
+  const restored = await readProject(page);
+  expect(restored.players[0]).toMatchObject({
+    domeOrientation: 'right-away', domeOrientationReference: pointId, rotation: 25 * Math.PI / 180,
+  });
+  await page.locator('.warp-workspace').screenshot({ path: testInfo.outputPath('grid-relative-orientation.png') });
+  await page.locator('.inspector').screenshot({ path: testInfo.outputPath('grid-relative-inspector.png') });
+  await openPlanetarium(page);
+  await page.getByRole('tab', { name: 'Calibration', exact: true }).click();
+  await page.locator('.planetarium-panel').screenshot({ path: testInfo.outputPath('orientation-calibration-reference.png') });
+  assertNoRuntimeErrors();
+});
+
 test('calibration drag history, solver results, preview modes, split pixels, and patterns render', async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   const assertNoRuntimeErrors = monitorRuntimeErrors(page);
