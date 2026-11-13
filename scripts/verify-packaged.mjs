@@ -278,6 +278,17 @@ try {
   });
   await outputPage.evaluate(() => window.freeform.setFullscreen(false));
   assert(await windowedOutput, 'The packaged output must emit leave-full-screen before windowed resize checks.');
+  const normalOutputState = await electronApp.evaluate(({ BrowserWindow }) => {
+    const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
+    if (output.isMaximized()) output.unmaximize();
+    return {
+      fullScreen: output.isFullScreen(),
+      maximized: output.isMaximized(),
+      bounds: output.getBounds(),
+    };
+  });
+  assert(!normalOutputState.fullScreen && !normalOutputState.maximized,
+    `Output must be normal and unmaximized before resize: ${JSON.stringify(normalOutputState)}`);
   const beforeOutputResize = await electronApp.evaluate(({ BrowserWindow }) => {
     const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
     return output.getBounds();
@@ -288,7 +299,8 @@ try {
     await window.freeform.endWindowResize();
     return { started, after };
   });
-  assert(resizedOutput.started);
+  assert(resizedOutput.started,
+    `Packaged output resize must start in a normal window: ${JSON.stringify({ normalOutputState, resizedOutput })}`);
   assert.equal(resizedOutput.after.width, beforeOutputResize.width + 40);
   assert.equal(resizedOutput.after.height, beforeOutputResize.height + 30);
   const beforeOutputMove = await electronApp.evaluate(({ BrowserWindow }) => {
