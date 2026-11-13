@@ -278,9 +278,17 @@ try {
   });
   await outputPage.evaluate(() => window.freeform.setFullscreen(false));
   assert(await windowedOutput, 'The packaged output must emit leave-full-screen before windowed resize checks.');
-  const normalOutputState = await electronApp.evaluate(({ BrowserWindow }) => {
+  await electronApp.evaluate(({ BrowserWindow }) => {
     const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
     if (output.isMaximized()) output.unmaximize();
+  });
+  // Windows clears the maximized flag asynchronously after leaving fullscreen.
+  await expect.poll(() => electronApp.evaluate(({ BrowserWindow }) => {
+    const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
+    return !output.isFullScreen() && !output.isMaximized();
+  })).toBe(true);
+  const normalOutputState = await electronApp.evaluate(({ BrowserWindow }) => {
+    const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
     return {
       fullScreen: output.isFullScreen(),
       maximized: output.isMaximized(),
