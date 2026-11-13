@@ -352,6 +352,9 @@ function registerProjectHandlers() {
       || (presentationWindowFullscreen || presentationWindow.isFullScreen())
       || (presentationWindow.isMaximized() && !hasExplicitWorkAreaRestore(presentationWindow))) return false;
     finishWindowMove();
+    // Clear stale native size limits once, not on every pointer update. Windows 10
+    // can otherwise reapply old constraints during a transparent-window resize.
+    presentationWindow.setMaximumSize(0, 0);
     presentationRestoredWorkAreaPlacement = null;
     const nativeCursor = screen.getCursorScreenPoint();
     windowResizeSession = {
@@ -375,9 +378,6 @@ function registerProjectHandlers() {
       session.direction,
       PRESENT_WINDOW_MINIMUM_SIZE,
     );
-    // Windows constrains programmatic sizing while this transparent window is
-    // natively non-resizable. Release that constraint for this trusted IPC update.
-    presentationWindow.setMaximumSize(0, 0);
     presentationWindow.setBounds(bounds);
     return { ...presentationWindow.getBounds(), displayId: String(screen.getDisplayMatching(presentationWindow.getBounds()).id) };
   });
@@ -426,7 +426,9 @@ function registerProjectHandlers() {
     const requested = moveWindowBounds(session.bounds, cursorDelta);
     const scaleFactor = screen.getDisplayMatching(requested).scaleFactor;
     const bounds = moveWindowBounds(session.bounds, cursorDelta, scaleFactor);
-    presentationWindow.setPosition(bounds.x, bounds.y);
+    // Windows 10 can grow a window on fractional-scale displays when setPosition
+    // is used repeatedly. Supply the original drag-session size on every update.
+    presentationWindow.setBounds(bounds);
     const current = presentationWindow.getBounds();
     return { ...current, displayId: String(screen.getDisplayMatching(current).id) };
   });
