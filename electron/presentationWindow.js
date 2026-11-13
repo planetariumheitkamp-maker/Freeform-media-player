@@ -12,6 +12,13 @@ function overlapArea(bounds, area) {
   return width * height;
 }
 
+/** Select real native bounds when Windows reports an empty restore rectangle. */
+export function selectNormalWindowBounds(...candidates) {
+  const bounds = candidates.find((candidate) => ['x', 'y', 'width', 'height'].every((key) => Number.isFinite(candidate?.[key]))
+    && candidate.width > 0 && candidate.height > 0);
+  return bounds ? { ...bounds } : null;
+}
+
 /**
  * Resolves saved window bounds against the currently connected monitors.
  * A missing monitor falls back to the display with the greatest current overlap.

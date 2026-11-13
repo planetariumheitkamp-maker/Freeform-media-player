@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { canUseMainWindowCapture } from './capturePermissions.js';
 import { isMainWindowFrame } from './windowSecurity.js';
 import { createRecordingController } from './recordings.js';
-import { moveWindowBounds, resizeWindowBounds, resolveWindowPlacement, WINDOW_RESIZE_DIRECTIONS } from './presentationWindow.js';
+import { moveWindowBounds, resizeWindowBounds, resolveWindowPlacement, selectNormalWindowBounds, WINDOW_RESIZE_DIRECTIONS } from './presentationWindow.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const allowedMediaPaths = new Set();
@@ -59,8 +59,8 @@ function sameWindowBounds(first, second) {
   return ['x', 'y', 'width', 'height'].every((key) => first?.[key] === second?.[key]);
 }
 
-async function restoreNormalWindow(window, savedPlacement = presentationNormalPlacement ?? window.getNormalBounds()) {
-  const placement = savedPlacement ? { ...savedPlacement } : null;
+async function restoreNormalWindow(window, savedPlacement = presentationNormalPlacement) {
+  const placement = selectNormalWindowBounds(savedPlacement);
   const isNormal = () => !window.isDestroyed() && !window.isMaximized()
     && (!placement || sameWindowBounds(window.getBounds(), placement));
   // Transparent Windows windows may not emit unmaximize. Poll the real native
@@ -86,8 +86,12 @@ async function restoreNormalWindow(window, savedPlacement = presentationNormalPl
 
 function getPresentationWindowPlacement() {
   if (!presentationWindow) return null;
-  if (presentationNormalPlacement) return { ...presentationNormalPlacement };
-  const bounds = presentationWindow.getNormalBounds();
+  const bounds = selectNormalWindowBounds(
+    presentationNormalPlacement,
+    presentationWindow.getNormalBounds(),
+    presentationWindow.getBounds(),
+  );
+  if (!bounds) return null;
   const display = screen.getDisplayMatching(bounds);
   return { ...bounds, displayId: String(display.id) };
 }
@@ -254,8 +258,8 @@ function registerProjectHandlers() {
     finishWindowResize();
     finishWindowMove();
     if (value) {
-      // Keep normal output bounds independently of the fullscreen transition.
-      presentationNormalPlacement ??= getPresentationWindowPlacement();
+      // Keep valid normal output bounds independently of the fullscreen transition.
+      presentationNormalPlacement = getPresentationWindowPlacement();
       output.setFullScreen(true);
     } else {
       await leaveWindowFullscreen(output);

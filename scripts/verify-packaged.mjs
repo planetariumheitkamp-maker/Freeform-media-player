@@ -357,6 +357,21 @@ try {
   const afterFullscreenProject = await outputPage.evaluate(async () => JSON.parse(await window.freeform.getPresentationProject()));
   assert.deepEqual(afterFullscreenProject.players, beforeMoveProject.players);
   assert.deepEqual(afterFullscreenProject.output, beforeMoveProject.output);
+  const beforeEmptyRestore = (await outputNativeState()).bounds;
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
+    output.getNormalBounds = () => ({ x: 0, y: 0, width: 0, height: 0 });
+  });
+  await outputPage.evaluate(() => window.freeform.setFullscreen(true));
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
+    delete output.getNormalBounds;
+  });
+  await outputPage.evaluate(() => window.freeform.setFullscreen(false));
+  const afterEmptyRestore = await outputNativeState();
+  assert(!afterEmptyRestore.fullScreen && !afterEmptyRestore.maximized,
+    `An empty native restore rectangle must fall back to real bounds: ${JSON.stringify(afterEmptyRestore)}`);
+  assert.deepEqual(afterEmptyRestore.bounds, beforeEmptyRestore);
   checks.push('Output locking rejects movement/resizing and leaves the editor controllable; unlocked IPC moves only x/y and resizes real bounds.');
 
   await page.screenshot({ path: path.join(outputDirectory, 'desktop-editor-present.png') });

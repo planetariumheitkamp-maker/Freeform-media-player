@@ -1,10 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { moveWindowBounds, resizeWindowBounds, resolveWindowPlacement } from '../../electron/presentationWindow.js';
+import { moveWindowBounds, resizeWindowBounds, resolveWindowPlacement, selectNormalWindowBounds } from '../../electron/presentationWindow.js';
 
 const displays = [
   { id: 101, workArea: { x: 0, y: 0, width: 1920, height: 1040 } },
   { id: 202, workArea: { x: 1920, y: -120, width: 2560, height: 1400 } },
 ];
+
+describe('normal native window bounds', () => {
+  it('prefers a valid saved normal rectangle', () => {
+    const saved = { x: 40, y: 20, width: 1120, height: 672, displayId: '202' };
+    expect(selectNormalWindowBounds(saved, { x: 0, y: 0, width: 1920, height: 1080 })).toEqual(saved);
+    expect(saved).toEqual({ x: 40, y: 20, width: 1120, height: 672, displayId: '202' });
+  });
+
+  it('skips empty restore rectangles reported by transparent Windows windows', () => {
+    const empty = { x: 0, y: 0, width: 0, height: 0 };
+    const current = { x: 0, y: 0, width: 1280, height: 720 };
+    expect(selectNormalWindowBounds(empty, empty, current)).toEqual(current);
+  });
+
+  it('rejects missing, non-finite, and non-positive rectangles', () => {
+    expect(selectNormalWindowBounds(null, undefined, { x: 0, y: 0, width: -1, height: 720 })).toBeNull();
+    expect(selectNormalWindowBounds({ x: 0, y: Number.NaN, width: 1280, height: 720 })).toBeNull();
+  });
+});
 
 describe('native Present window placement', () => {
   it('restores the saved monitor and normal-window bounds', () => {

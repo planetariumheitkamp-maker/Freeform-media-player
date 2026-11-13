@@ -10,6 +10,10 @@ export interface PresentationBounds {
   height: number;
 }
 
+export function selectNormalWindowBounds(
+  ...candidates: Array<(PresentationBounds & { displayId?: string }) | null | undefined>
+): (PresentationBounds & { displayId?: string }) | null;
+
 export function resolveWindowPlacement(
   input: (PresentationBounds & { displayId?: string }) | null | undefined,
   displays: PresentationDisplay[],
