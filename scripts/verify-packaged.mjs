@@ -287,8 +287,12 @@ try {
       output.once('leave-full-screen', onLeave);
     });
   });
+  const intendedOutputPlacement = await outputPage.evaluate(() => window.freeform.getWindowPlacement());
+  console.log('Fullscreen output native state:', JSON.stringify(await outputNativeState()));
+  console.log('Windowed output intended placement:', JSON.stringify(intendedOutputPlacement));
   await outputPage.evaluate(() => window.freeform.setFullscreen(false));
   assert(await windowedOutput, 'The packaged output must emit leave-full-screen before windowed resize checks.');
+  console.log('Windowed output native state:', JSON.stringify(await outputNativeState()));
   // Windows clears the maximized flag asynchronously after leaving fullscreen.
   await expect.poll(outputNativeState).toMatchObject({ fullScreen: false, maximized: false });
   const normalOutputState = await outputNativeState();
