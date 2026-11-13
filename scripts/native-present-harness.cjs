@@ -91,7 +91,7 @@ async function leaveFullscreen(contents, output) {
 }
 async function setOutputPlacement(contents, output, placement) {
   await evaluate(contents, `window.freeform.setWindowPlacement(${JSON.stringify(placement)})`);
-  await waitNative(() => ['x', 'y', 'width', 'height'].every(key => output.getNormalBounds()[key] === placement[key]), 'Output placement');
+  await waitNative(() => ['x', 'y', 'width', 'height'].every(key => output.getBounds()[key] === placement[key]), 'Output placement');
   await waitFor(output.webContents, `innerWidth === ${placement.width} && innerHeight === ${placement.height}`, 'Output renderer matches native bounds');
   return evaluate(contents, 'window.freeform.getWindowPlacement()');
 }
@@ -180,13 +180,27 @@ async function exerciseOutputMove(contents, output, delta, { fullscreen = false,
   assert.equal(hitTarget, 'surface', 'The center pointer must hit the native move surface.');
   const scale = screen.getDisplayMatching(before).scaleFactor;
   const start = { x: Math.round((before.x + before.width / 2) * scale), y: Math.round((before.y + before.height / 2) * scale) };
-  await executeFile(path.join(root, 'test-results', 'native-pointer-drag.exe'), [String(start.x), String(start.y), String(Math.round(delta.x * scale)), String(Math.round(delta.y * scale))], { timeout: 15000 });
+  await evaluate(output.webContents, `(() => {
+    const trace = [];
+    const surface = document.querySelector('[data-window-move]');
+    for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'gotpointercapture', 'lostpointercapture']) {
+      surface.addEventListener(type, event => trace.push({
+        type, pointerId: event.pointerId, pointerType: event.pointerType, button: event.button, buttons: event.buttons,
+        screen: { x: event.screenX, y: event.screenY }, client: { x: event.clientX, y: event.clientY },
+        captured: surface.hasPointerCapture(event.pointerId), defaultPrevented: event.defaultPrevented,
+      }));
+    }
+    window.__freeformNativeMoveTrace = trace;
+  })()`);
+  const pointerResult = await executeFile(path.join(root, 'test-results', 'native-pointer-drag.exe'), [String(start.x), String(start.y), String(Math.round(delta.x * scale)), String(Math.round(delta.y * scale))], { timeout: 15000 });
   await waitNative(() => fullscreen ? fullscreenEvents.at(-1) === 'leave' : !output.isFullScreen(), 'Dragging fullscreen restores a normal output window');
   await wait(350);
   const after = output.getBounds();
   const expected = fullscreen ? normalBefore : before;
-  assert(Math.abs(after.x - expected.x - delta.x) <= 3, `Windows pointer drag must move output x: ${JSON.stringify({ before, normalBefore, after, delta })}`);
-  assert(Math.abs(after.y - expected.y - delta.y) <= 3, `Windows pointer drag must move output y: ${JSON.stringify({ before, normalBefore, after, delta })}`);
+  const pointerTrace = await evaluate(output.webContents, 'window.__freeformNativeMoveTrace');
+  const pointerDiagnostics = { before, normalBefore, after, delta, scale, start, pointerResult, nativeCursor: screen.getCursorScreenPoint(), pointerTrace };
+  assert(Math.abs(after.x - expected.x - delta.x) <= 3, `Windows pointer drag must move output x: ${JSON.stringify(pointerDiagnostics)}`);
+  assert(Math.abs(after.y - expected.y - delta.y) <= 3, `Windows pointer drag must move output y: ${JSON.stringify(pointerDiagnostics)}`);
   assert.equal(after.width, expected.width, 'Moving must preserve output width.');
   assert.equal(after.height, expected.height, 'Moving must preserve output height.');
   const projectAfter = JSON.parse(await evaluate(output.webContents, 'window.freeform.getPresentationProject()'));
@@ -269,6 +283,11 @@ async function firstPhase(contents, editor) {
   await leaveFullscreen(contents, output);
   const saved = await setOutputPlacement(contents, output, placement);
   report.lock.normalPlacement = saved;
+  await setOutputPlacement(contents, output, area);
+  assert(output.isMaximized(), 'The exact Windows work-area rectangle must reproduce Electron\'s geometric maximized state.');
+  report.lock.workAreaMove = await exerciseOutputMove(contents, output, { x: -60, y: 40 });
+  assert(!output.isMaximized(), 'Real pointer movement must leave the geometric work-area state.');
+  await setOutputPlacement(contents, output, placement);
   Object.assign(report.media, await exerciseMediaPlayback(contents, output, { evaluate, waitFor, waitNative }));
   await referenceWindow(output);
   await captureDesktop(output, 'desktop-reference');

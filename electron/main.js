@@ -30,6 +30,7 @@ let presentationWindowLocked = false;
 let presentationWindowFullscreen = false;
 let applyingWindowPlacement = false;
 let presentationNormalPlacement = null;
+let presentationRestoredWorkAreaPlacement = null;
 let windowResizeSession = null;
 let windowMoveSession = null;
 
@@ -59,9 +60,40 @@ function sameWindowBounds(first, second) {
   return ['x', 'y', 'width', 'height'].every((key) => first?.[key] === second?.[key]);
 }
 
+function isTransparentWorkAreaRestore(window, placement) {
+  return process.platform === 'win32' && window === presentationWindow && Boolean(placement)
+    && sameWindowBounds(placement, screen.getDisplayMatching(placement).workArea);
+}
+
+function hasExplicitWorkAreaRestore(window) {
+  return window === presentationWindow && sameWindowBounds(presentationRestoredWorkAreaPlacement, window.getBounds());
+}
+
+function applyNormalWindowPlacement(window, placement) {
+  if (placement) window.setBounds(placement);
+  // Electron 45 defines every transparent Windows window with work-area bounds
+  // as maximized, even after restoring it. Record only our explicit restoration,
+  // never an assumed native state, and preserve the exact saved rectangle.
+  const restoredWorkArea = isTransparentWorkAreaRestore(window, placement)
+    && sameWindowBounds(window.getBounds(), placement);
+  if (restoredWorkArea && !presentationWindowLocked) {
+    // Refresh stale native constraints left by locking/fullscreen. Without this,
+    // Windows can add one DIP to each axis on every subsequent setPosition call.
+    window.setResizable(false);
+    window.setResizable(true);
+    window.setMaximumSize(0, 0);
+  }
+  if (window === presentationWindow) {
+    presentationRestoredWorkAreaPlacement = restoredWorkArea ? { ...placement } : null;
+  }
+  return restoredWorkArea;
+}
+
 async function restoreNormalWindow(window, savedPlacement = presentationNormalPlacement) {
   const placement = selectNormalWindowBounds(savedPlacement);
-  const isNormal = () => !window.isDestroyed() && !window.isMaximized()
+  if (window === presentationWindow) presentationRestoredWorkAreaPlacement = null;
+  let restoredWorkArea = false;
+  const isNormal = () => !window.isDestroyed() && (!window.isMaximized() || restoredWorkArea)
     && (!placement || sameWindowBounds(window.getBounds(), placement));
   // Transparent Windows windows may not emit unmaximize. Poll the real native
   // state for at most five seconds instead of trusting that event or a stale flag.
@@ -74,7 +106,7 @@ async function restoreNormalWindow(window, savedPlacement = presentationNormalPl
       // so explicitly restore Freeform's independently saved normal placement.
       window.setMaximumSize(0, 0);
       window.unmaximize();
-      if (placement) window.setBounds(placement);
+      restoredWorkArea = applyNormalWindowPlacement(window, placement);
     } finally {
       applyingWindowPlacement = false;
     }
@@ -88,6 +120,7 @@ function getPresentationWindowPlacement() {
   if (!presentationWindow) return null;
   const bounds = selectNormalWindowBounds(
     presentationNormalPlacement,
+    hasExplicitWorkAreaRestore(presentationWindow) ? presentationRestoredWorkAreaPlacement : null,
     presentationWindow.getNormalBounds(),
     presentationWindow.getBounds(),
   );
@@ -260,6 +293,7 @@ function registerProjectHandlers() {
     if (value) {
       // Keep valid normal output bounds independently of the fullscreen transition.
       presentationNormalPlacement = getPresentationWindowPlacement();
+      presentationRestoredWorkAreaPlacement = null;
       output.setFullScreen(true);
     } else {
       await leaveWindowFullscreen(output);
@@ -281,7 +315,7 @@ function registerProjectHandlers() {
     const placement = resolveWindowPlacement(
       input,
       screen.getAllDisplays(),
-      output.getNormalBounds(),
+      getPresentationWindowPlacement() ?? output.getBounds(),
       PRESENT_WINDOW_MINIMUM_SIZE,
     );
     if (!placement) return null;
@@ -292,12 +326,13 @@ function registerProjectHandlers() {
     try {
       // Unlocking cannot clear this transparent window's native size limits.
       output.setMaximumSize(0, 0);
-      output.setBounds(placement);
+      applyNormalWindowPlacement(output, placement);
     } finally {
       applyingWindowPlacement = false;
     }
-    presentationNormalPlacement = { ...placement };
-    return { ...output.getNormalBounds(), displayId: placement.displayId };
+    const current = output.getBounds();
+    presentationNormalPlacement = { ...current };
+    return { ...current, displayId: placement.displayId };
   });
 
   ipcMain.handle('window:set-locked', (event, value) => {
@@ -314,8 +349,10 @@ function registerProjectHandlers() {
   ipcMain.handle('window:begin-resize', (event, direction, cursor) => {
     if (!isMainWindowFrame(event.senderFrame, presentationWindow)) return false;
     if (presentationWindowLocked || !WINDOW_RESIZE_DIRECTIONS.has(direction)
-      || (presentationWindowFullscreen || presentationWindow.isFullScreen()) || presentationWindow.isMaximized()) return false;
+      || (presentationWindowFullscreen || presentationWindow.isFullScreen())
+      || (presentationWindow.isMaximized() && !hasExplicitWorkAreaRestore(presentationWindow))) return false;
     finishWindowMove();
+    presentationRestoredWorkAreaPlacement = null;
     const nativeCursor = screen.getCursorScreenPoint();
     windowResizeSession = {
       direction,
@@ -359,10 +396,13 @@ function registerProjectHandlers() {
     if (presentationWindow !== output || output.isDestroyed() || presentationWindowLocked) return false;
     if (!(await restoreNormalWindow(output, normalPlacement))) return false;
     if (presentationWindow !== output || output.isDestroyed() || presentationWindowLocked) return false;
+    const restoredWorkArea = hasExplicitWorkAreaRestore(output);
     presentationNormalPlacement = null;
+    presentationRestoredWorkAreaPlacement = null;
     const nativeCursor = screen.getCursorScreenPoint();
     windowMoveSession = {
-      bounds: output.getNormalBounds(),
+      bounds: output.getBounds(),
+      restoredWorkArea,
       cursor: {
         x: Number.isFinite(cursor?.x) ? cursor.x : nativeCursor.x,
         y: Number.isFinite(cursor?.y) ? cursor.y : nativeCursor.y,
@@ -374,7 +414,10 @@ function registerProjectHandlers() {
   ipcMain.handle('window:update-move', (event, cursor) => {
     if (!isMainWindowFrame(event.senderFrame, presentationWindow) || !windowMoveSession) return null;
     if (presentationWindowLocked || !Number.isFinite(cursor?.x) || !Number.isFinite(cursor?.y)) return null;
-    if ((presentationWindowFullscreen || presentationWindow.isFullScreen()) || presentationWindow.isMaximized()) {
+    // Only an explicitly restored Windows work-area rectangle may still report
+    // itself as maximized here; ordinary maximized windows still reject motion.
+    if ((presentationWindowFullscreen || presentationWindow.isFullScreen())
+      || (presentationWindow.isMaximized() && !windowMoveSession.restoredWorkArea)) {
       finishWindowMove();
       return null;
     }
@@ -562,6 +605,7 @@ async function createPresentationWindow() {
     presentationWindowLocked = false;
     presentationWindowFullscreen = false;
     presentationNormalPlacement = null;
+    presentationRestoredWorkAreaPlacement = null;
     presentationProject = null;
     presentationWindow = null;
     if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {

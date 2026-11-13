@@ -279,6 +279,20 @@ try {
       normalBounds: output.getNormalBounds(),
     };
   });
+  const resizeFixture = await outputPage.evaluate(async () => {
+    const previous = await window.freeform.getWindowPlacement();
+    const current = await window.freeform.setWindowPlacement({
+      ...previous,
+      x: previous.x + 40,
+      y: previous.y + 40,
+      width: Math.max(320, previous.width - 160),
+      height: Math.max(240, previous.height - 160),
+    });
+    return { previous, current };
+  });
+  assert(resizeFixture.current.width < resizeFixture.previous.width);
+  assert(resizeFixture.current.height < resizeFixture.previous.height);
+  await outputPage.evaluate(() => window.freeform.setFullscreen(true));
   const windowedOutput = electronApp.evaluate(({ BrowserWindow }) => {
     const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
     return new Promise((resolve) => {
@@ -373,6 +387,46 @@ try {
     `An empty native restore rectangle must fall back to real bounds: ${JSON.stringify(afterEmptyRestore)}`);
   assert.deepEqual(afterEmptyRestore.bounds, beforeEmptyRestore);
   checks.push('Output locking rejects movement/resizing and leaves the editor controllable; unlocked IPC moves only x/y and resizes real bounds.');
+
+  const workArea = await electronApp.evaluate(({ BrowserWindow, screen }) => {
+    const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
+    return screen.getDisplayMatching(output.getBounds()).workArea;
+  });
+  const savedWorkArea = await outputPage.evaluate((area) => window.freeform.setWindowPlacement(area), workArea);
+  assert.deepEqual(savedWorkArea, { ...workArea, displayId: savedWorkArea.displayId });
+  await outputPage.evaluate(() => window.freeform.setFullscreen(true));
+  await outputPage.evaluate(() => window.freeform.setFullscreen(false));
+  const restoredWorkArea = await outputNativeState();
+  console.log('Explicit work-area restore:', JSON.stringify(restoredWorkArea));
+  assert(!restoredWorkArea.fullScreen && restoredWorkArea.movable && restoredWorkArea.resizable);
+  assert(restoredWorkArea.maximized,
+    `Windows must reproduce its transparent work-area maximized result: ${JSON.stringify(restoredWorkArea)}`);
+  assert.deepEqual(restoredWorkArea.bounds, workArea);
+  const beforeWorkAreaProject = await outputPage.evaluate(async () => JSON.parse(await window.freeform.getPresentationProject()));
+  const dragOutput = async (start, end) => outputPage.evaluate(async (points) => {
+    const started = await window.freeform.beginWindowMove(points.start);
+    const after = started ? await window.freeform.updateWindowMove(points.end) : null;
+    await window.freeform.endWindowMove();
+    return { started, after };
+  }, { start, end });
+  const workAreaDrag = await dragOutput({ x: 400, y: 300 }, { x: 420, y: 310 });
+  assert(workAreaDrag.started, `Dragging must restore an exact work-area output: ${JSON.stringify(await outputNativeState())}`);
+  assert.equal(workAreaDrag.after.x, savedWorkArea.x + 20);
+  assert.equal(workAreaDrag.after.y, savedWorkArea.y + 10);
+  assert.equal(workAreaDrag.after.width, savedWorkArea.width);
+  assert.equal(workAreaDrag.after.height, savedWorkArea.height);
+  assert(!(await outputNativeState()).maximized);
+  const secondWorkAreaDrag = await dragOutput({ x: 400, y: 300 }, { x: 424, y: 316 });
+  assert(secondWorkAreaDrag.started);
+  assert.equal(secondWorkAreaDrag.after.x, workAreaDrag.after.x + 24);
+  assert.equal(secondWorkAreaDrag.after.y, workAreaDrag.after.y + 16);
+  assert.equal(secondWorkAreaDrag.after.width, savedWorkArea.width);
+  assert.equal(secondWorkAreaDrag.after.height, savedWorkArea.height);
+  assert.deepEqual(await outputPage.evaluate(() => window.freeform.getWindowPlacement()), secondWorkAreaDrag.after);
+  const afterWorkAreaProject = await outputPage.evaluate(async () => JSON.parse(await window.freeform.getPresentationProject()));
+  assert.deepEqual(afterWorkAreaProject.players, beforeWorkAreaProject.players);
+  assert.deepEqual(afterWorkAreaProject.output, beforeWorkAreaProject.output);
+  checks.push('A saved Windows work-area rectangle restores with its real dimensions and supports repeated dragging without native size drift or player changes.');
 
   await page.screenshot({ path: path.join(outputDirectory, 'desktop-editor-present.png') });
   await outputPage.screenshot({ path: path.join(outputDirectory, 'desktop-output-present.png') });
