@@ -314,4 +314,7 @@ export interface FreeformBridge {
   beginWindowResize(direction: string, cursor: { x: number; y: number }): Promise<boolean>;
   updateWindowResize(cursor: { x: number; y: number }): Promise<DesktopWindowPlacement | null>;
   endWindowResize(): Promise<void>;
+  beginWindowMove(cursor: { x: number; y: number }): Promise<boolean>;
+  updateWindowMove(cursor: { x: number; y: number }): Promise<DesktopWindowPlacement | null>;
+  endWindowMove(): Promise<void>;
 }

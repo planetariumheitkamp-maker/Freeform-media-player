@@ -259,12 +259,25 @@ try {
   assert(lockedEditor?.movable && lockedEditor.resizable);
   assert(lockedOutput && !lockedOutput.movable && !lockedOutput.resizable);
   assert.equal(await outputPage.evaluate(() => window.freeform.beginWindowResize('se', { x: 0, y: 0 })), false);
+  assert.equal(await outputPage.evaluate(() => window.freeform.beginWindowMove({ x: 0, y: 0 })), false);
+  await expect(outputPage.locator('[data-window-move]')).toHaveCount(0);
   await expect(page.locator('[data-window-resize]')).toHaveCount(0);
   await page.getByRole('button', { name: /Layout \+ window/ }).click();
   await expect.poll(() => electronApp.evaluate(({ BrowserWindow }) => {
     const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
     return output?.isMovable();
   })).toBe(true);
+  await expect(outputPage.locator('[data-window-move]')).toHaveCount(1);
+  const windowedOutput = electronApp.evaluate(({ BrowserWindow }) => {
+    const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
+    return new Promise((resolve) => {
+      const onLeave = () => { clearTimeout(timeout); resolve(true); };
+      const timeout = setTimeout(() => { output.off('leave-full-screen', onLeave); resolve(false); }, 10_000);
+      output.once('leave-full-screen', onLeave);
+    });
+  });
+  await outputPage.evaluate(() => window.freeform.setFullscreen(false));
+  assert(await windowedOutput, 'The packaged output must emit leave-full-screen before windowed resize checks.');
   const beforeOutputResize = await electronApp.evaluate(({ BrowserWindow }) => {
     const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
     return output.getBounds();
@@ -278,7 +291,26 @@ try {
   assert(resizedOutput.started);
   assert.equal(resizedOutput.after.width, beforeOutputResize.width + 40);
   assert.equal(resizedOutput.after.height, beforeOutputResize.height + 30);
-  checks.push('Output locking leaves the editor movable/resizable; unlocked output resize IPC changes real bounds.');
+  const beforeOutputMove = await electronApp.evaluate(({ BrowserWindow }) => {
+    const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
+    return output.getBounds();
+  });
+  const beforeMoveProject = await outputPage.evaluate(async () => JSON.parse(await window.freeform.getPresentationProject()));
+  const movedOutput = await outputPage.evaluate(async () => {
+    const started = await window.freeform.beginWindowMove({ x: 100, y: 100 });
+    const after = started ? await window.freeform.updateWindowMove({ x: 160, y: 140 }) : null;
+    await window.freeform.endWindowMove();
+    return { started, after };
+  });
+  const afterMoveProject = await outputPage.evaluate(async () => JSON.parse(await window.freeform.getPresentationProject()));
+  assert(movedOutput.started);
+  assert.equal(movedOutput.after.x, beforeOutputMove.x + 60);
+  assert.equal(movedOutput.after.y, beforeOutputMove.y + 40);
+  assert.equal(movedOutput.after.width, beforeOutputMove.width);
+  assert.equal(movedOutput.after.height, beforeOutputMove.height);
+  assert.deepEqual(afterMoveProject.players, beforeMoveProject.players);
+  assert.deepEqual(afterMoveProject.output, beforeMoveProject.output);
+  checks.push('Output locking rejects movement/resizing and leaves the editor controllable; unlocked IPC moves only x/y and resizes real bounds.');
 
   await page.screenshot({ path: path.join(outputDirectory, 'desktop-editor-present.png') });
   await outputPage.screenshot({ path: path.join(outputDirectory, 'desktop-output-present.png') });

@@ -158,6 +158,15 @@ const browserBridge: FreeformBridge = {
   async endWindowResize() {
     // Browser previews use their ordinary operating-system window controls.
   },
+  async beginWindowMove() {
+    return false;
+  },
+  async updateWindowMove() {
+    return null;
+  },
+  async endWindowMove() {
+    // Browser previews use their ordinary operating-system window controls.
+  },
 };
 
 export const runtime: FreeformBridge = window.freeform ?? browserBridge;

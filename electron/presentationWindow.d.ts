@@ -17,6 +17,12 @@ export function resolveWindowPlacement(
   minimumSize?: [number, number],
 ): (PresentationBounds & { displayId: string }) | null;
 
+export function moveWindowBounds(
+  bounds: PresentationBounds,
+  cursorDelta: { x: number; y: number },
+  scaleFactor?: number,
+): PresentationBounds;
+
 export const WINDOW_RESIZE_DIRECTIONS: Set<string>;
 
 export function resizeWindowBounds(

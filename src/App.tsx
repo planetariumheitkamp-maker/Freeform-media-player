@@ -9,6 +9,7 @@ import { Toasts } from './components/Toasts';
 import { TopBar } from './components/TopBar';
 import { TransportBar } from './components/TransportBar';
 import { WarpWorkspace } from './components/WarpWorkspace';
+import { WindowMoveSurface } from './components/WindowMoveSurface';
 import { WindowResizeHandles } from './components/WindowResizeHandles';
 import { WorkspaceToolbar } from './components/WorkspaceToolbar';
 import { GUIDE_TARGETS, useGuideTarget } from './lib/guideActions';
@@ -387,6 +388,7 @@ export default function App() {
       </div>
       {controlsMinimized && !presenting && <button className="restore-controls button" aria-label="Show control panels" title="Show control panels (Shift+F or Esc)" onClick={() => setControlsMinimized(false)}><Maximize2 size={14} />Show control panels <kbd>Shift+F</kbd></button>}
       {!isPresentationWindow && (presentWindowOpen || presentation) && <PresentControls onExit={exitPresentation} />}
+      {isPresentationWindow && runtime.isDesktop && runtime.platform === 'win32' && !presentSettings.layoutLocked && <WindowMoveSurface />}
       {isPresentationWindow && runtime.isDesktop && runtime.platform === 'win32' && <WindowResizeHandles />}
       <Toasts />
     </div>

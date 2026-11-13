@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { canUseMainWindowCapture } from './capturePermissions.js';
 import { isMainWindowFrame } from './windowSecurity.js';
 import { createRecordingController } from './recordings.js';
-import { resizeWindowBounds, resolveWindowPlacement, WINDOW_RESIZE_DIRECTIONS } from './presentationWindow.js';
+import { moveWindowBounds, resizeWindowBounds, resolveWindowPlacement, WINDOW_RESIZE_DIRECTIONS } from './presentationWindow.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const allowedMediaPaths = new Set();
@@ -27,12 +27,32 @@ let presentationWindow;
 let presentationProject = null;
 const pendingDesktopRequests = new Map();
 let presentationWindowLocked = false;
+let presentationWindowFullscreen = false;
 let applyingWindowPlacement = false;
 let presentationNormalPlacement = null;
 let windowResizeSession = null;
+let windowMoveSession = null;
 
 function finishWindowResize() {
   windowResizeSession = null;
+}
+
+function finishWindowMove() {
+  windowMoveSession = null;
+}
+
+function leaveWindowFullscreen(window) {
+  if (!presentationWindowFullscreen && !window.isFullScreen()) return Promise.resolve();
+  return new Promise((resolve) => {
+    const finish = () => {
+      window.removeListener('leave-full-screen', finish);
+      window.removeListener('closed', finish);
+      resolve();
+    };
+    window.once('leave-full-screen', finish);
+    window.once('closed', finish);
+    window.setFullScreen(false);
+  });
 }
 
 function getPresentationWindowPlacement() {
@@ -202,6 +222,7 @@ function registerProjectHandlers() {
   ipcMain.handle('window:fullscreen', async (event, value) => {
     if (!canControlPresentation(event.senderFrame)) throw new Error('Only Freeform can change the output window.');
     finishWindowResize();
+    finishWindowMove();
     if (value) {
       // Keep normal output bounds independently of the fullscreen transition.
       presentationNormalPlacement ??= getPresentationWindowPlacement();
@@ -219,6 +240,7 @@ function registerProjectHandlers() {
 
   ipcMain.handle('window:set-placement', (event, input) => {
     if (!canControlPresentation(event.senderFrame)) return null;
+    finishWindowMove();
     const placement = resolveWindowPlacement(
       input,
       screen.getAllDisplays(),
@@ -228,7 +250,7 @@ function registerProjectHandlers() {
     if (!placement) return null;
     applyingWindowPlacement = true;
     try {
-      if (presentationWindow.isFullScreen()) presentationWindow.setFullScreen(false);
+      if ((presentationWindowFullscreen || presentationWindow.isFullScreen())) presentationWindow.setFullScreen(false);
       // Unlocking cannot clear this transparent window's native size limits.
       presentationWindow.setMaximumSize(0, 0);
       presentationWindow.setBounds(placement);
@@ -241,7 +263,10 @@ function registerProjectHandlers() {
   ipcMain.handle('window:set-locked', (event, value) => {
     if (!canControlPresentation(event.senderFrame)) throw new Error('Only Freeform can lock the output window.');
     presentationWindowLocked = Boolean(value);
-    if (presentationWindowLocked) finishWindowResize();
+    if (presentationWindowLocked) {
+      finishWindowResize();
+      finishWindowMove();
+    }
     presentationWindow?.setMovable(!presentationWindowLocked);
     presentationWindow?.setResizable(!presentationWindowLocked);
   });
@@ -249,7 +274,8 @@ function registerProjectHandlers() {
   ipcMain.handle('window:begin-resize', (event, direction, cursor) => {
     if (!isMainWindowFrame(event.senderFrame, presentationWindow)) return false;
     if (presentationWindowLocked || !WINDOW_RESIZE_DIRECTIONS.has(direction)
-      || presentationWindow.isFullScreen() || presentationWindow.isMaximized()) return false;
+      || (presentationWindowFullscreen || presentationWindow.isFullScreen()) || presentationWindow.isMaximized()) return false;
+    finishWindowMove();
     const nativeCursor = screen.getCursorScreenPoint();
     windowResizeSession = {
       direction,
@@ -281,6 +307,47 @@ function registerProjectHandlers() {
 
   ipcMain.handle('window:end-resize', (event) => {
     if (isMainWindowFrame(event.senderFrame, presentationWindow)) finishWindowResize();
+  });
+
+  ipcMain.handle('window:begin-move', async (event, cursor) => {
+    if (!isMainWindowFrame(event.senderFrame, presentationWindow) || presentationWindowLocked) return false;
+    const output = presentationWindow;
+    finishWindowResize();
+    finishWindowMove();
+    if (presentationWindowFullscreen || output.isFullScreen()) await leaveWindowFullscreen(output);
+    if (presentationWindow !== output || output.isDestroyed() || presentationWindowLocked) return false;
+    if (output.isMaximized()) output.unmaximize();
+    presentationNormalPlacement = null;
+    const nativeCursor = screen.getCursorScreenPoint();
+    windowMoveSession = {
+      bounds: output.getNormalBounds(),
+      cursor: {
+        x: Number.isFinite(cursor?.x) ? cursor.x : nativeCursor.x,
+        y: Number.isFinite(cursor?.y) ? cursor.y : nativeCursor.y,
+      },
+    };
+    return true;
+  });
+
+  ipcMain.handle('window:update-move', (event, cursor) => {
+    if (!isMainWindowFrame(event.senderFrame, presentationWindow) || !windowMoveSession) return null;
+    if (presentationWindowLocked || !Number.isFinite(cursor?.x) || !Number.isFinite(cursor?.y)) return null;
+    if ((presentationWindowFullscreen || presentationWindow.isFullScreen()) || presentationWindow.isMaximized()) {
+      finishWindowMove();
+      return null;
+    }
+    const session = windowMoveSession;
+    const cursorDelta = { x: cursor.x - session.cursor.x, y: cursor.y - session.cursor.y };
+    const requested = moveWindowBounds(session.bounds, cursorDelta);
+    const scaleFactor = screen.getDisplayMatching(requested).scaleFactor;
+    const bounds = moveWindowBounds(session.bounds, cursorDelta, scaleFactor);
+    presentationWindow.setPosition(bounds.x, bounds.y);
+    const current = presentationWindow.getBounds();
+    return { ...current, displayId: String(screen.getDisplayMatching(current).id) };
+  });
+
+  ipcMain.handle('window:end-move', (event) => {
+    if (isMainWindowFrame(event.senderFrame, presentationWindow)) finishWindowMove();
   });
 
   ipcMain.handle('window:transparency', (event, value) => {
@@ -439,9 +506,19 @@ async function createPresentationWindow() {
   presentationWindow.on('will-resize', (event) => {
     if (presentationWindowLocked && !applyingWindowPlacement) event.preventDefault();
   });
+  presentationWindow.on('enter-full-screen', () => {
+    presentationWindowFullscreen = true;
+    finishWindowMove();
+  });
+  presentationWindow.on('leave-full-screen', () => {
+    presentationWindowFullscreen = false;
+    finishWindowMove();
+  });
   presentationWindow.on('closed', () => {
     finishWindowResize();
+    finishWindowMove();
     presentationWindowLocked = false;
+    presentationWindowFullscreen = false;
     presentationNormalPlacement = null;
     presentationProject = null;
     presentationWindow = null;

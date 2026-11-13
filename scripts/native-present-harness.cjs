@@ -165,6 +165,36 @@ async function exerciseFloatingResize(contents, editor) {
   assert(Math.abs(reset.width - before.width) <= 2 && Math.abs(reset.height - before.height) <= 2, 'Double-click must restore default editor Present controls size.');
   return { before: { width: before.width, height: before.height }, after, reset, pointerInput: 'Windows' };
 }
+async function exerciseOutputMove(contents, output, delta, { fullscreen = false, placement = null, normalBounds = null, fullscreenEvents = [] } = {}) {
+  if (placement) await setOutputPlacement(contents, output, placement);
+  if (fullscreen) assert.equal(fullscreenEvents.at(-1), 'enter', 'The output must emit enter-full-screen before movement.');
+  else assert(!output.isFullScreen(), 'The output must start windowed before ordinary movement.');
+  assert.equal(await evaluate(output.webContents, `document.querySelectorAll('[data-window-move]').length`), 1, 'The unlocked output must expose its move surface.');
+  const before = output.getBounds();
+  const normalBefore = normalBounds ?? output.getNormalBounds();
+  const projectBefore = JSON.parse(await evaluate(output.webContents, 'window.freeform.getPresentationProject()'));
+  output.focus();
+  output.moveTop();
+  await wait(500);
+  const hitTarget = await evaluate(output.webContents, `document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.getAttribute('data-window-move')`);
+  assert.equal(hitTarget, 'surface', 'The center pointer must hit the native move surface.');
+  const scale = screen.getDisplayMatching(before).scaleFactor;
+  const start = { x: Math.round((before.x + before.width / 2) * scale), y: Math.round((before.y + before.height / 2) * scale) };
+  await executeFile(path.join(root, 'test-results', 'native-pointer-drag.exe'), [String(start.x), String(start.y), String(Math.round(delta.x * scale)), String(Math.round(delta.y * scale))], { timeout: 15000 });
+  await waitNative(() => fullscreen ? fullscreenEvents.at(-1) === 'leave' : !output.isFullScreen(), 'Dragging fullscreen restores a normal output window');
+  await wait(350);
+  const after = output.getBounds();
+  const expected = fullscreen ? normalBefore : before;
+  assert(Math.abs(after.x - expected.x - delta.x) <= 3, `Windows pointer drag must move output x: ${JSON.stringify({ before, normalBefore, after, delta })}`);
+  assert(Math.abs(after.y - expected.y - delta.y) <= 3, `Windows pointer drag must move output y: ${JSON.stringify({ before, normalBefore, after, delta })}`);
+  assert.equal(after.width, expected.width, 'Moving must preserve output width.');
+  assert.equal(after.height, expected.height, 'Moving must preserve output height.');
+  const projectAfter = JSON.parse(await evaluate(output.webContents, 'window.freeform.getPresentationProject()'));
+  assert.deepEqual(projectAfter.players, projectBefore.players, 'Native window movement must not change player geometry.');
+  assert.deepEqual(projectAfter.output, projectBefore.output, 'Native window movement must not change project output size.');
+  await captureRenderer(output.webContents, fullscreen ? 'renderer-output-after-fullscreen-move' : 'renderer-output-after-move');
+  return { before, normalBefore, after, delta, fullscreenEvents: [...fullscreenEvents], projectGeometryUnchanged: true, pointerInput: 'Windows' };
+}
 async function exerciseOutputResize(contents, output, placement) {
   assert.equal(await evaluate(output.webContents, `document.querySelectorAll('[data-window-resize]').length`), 8, 'The output must expose eight resize handles.');
   // Keep the southeast handle inside the physical desktop throughout the drag.
@@ -219,6 +249,23 @@ async function firstPhase(contents, editor) {
   assert(editor.isMovable() && editor.isResizable());
   assert.equal(await evaluate(output.webContents, `document.querySelectorAll('.top-bar, .inspector, .source-rail, .present-controls').length`), 0, 'The output must not contain editing or Present controls.');
   assert.equal(await evaluate(output.webContents, `document.querySelectorAll('[data-window-resize]').length`), 8);
+  const fullscreenEvents = [];
+  output.on('enter-full-screen', () => fullscreenEvents.push('enter'));
+  output.on('leave-full-screen', () => fullscreenEvents.push('leave'));
+  await leaveFullscreen(contents, output);
+  await setOutputPlacement(contents, output, placement);
+  const earlyMovePlacement = { ...placement, x: placement.x - 120, y: placement.y + 20, height: placement.height - 80 };
+  report.lock.outputMove = await exerciseOutputMove(contents, output, { x: 60, y: 40 }, { placement: earlyMovePlacement });
+  await setOutputPlacement(contents, output, placement);
+  const normalBeforeFullscreen = output.getNormalBounds();
+  output.focus();
+  output.moveTop();
+  await wait(250);
+  output.setFullScreen(true);
+  await wait(1200);
+  report.lock.fullscreenAttempt = { events: [...fullscreenEvents], fullScreenable: output.isFullScreenable(), state: nativeState(output) };
+  assert.equal(fullscreenEvents.at(-1), 'enter', `Fullscreen output before dragging: ${JSON.stringify(report.lock.fullscreenAttempt)}`);
+  report.lock.fullscreenMove = await exerciseOutputMove(contents, output, { x: -80, y: 60 }, { fullscreen: true, normalBounds: normalBeforeFullscreen, fullscreenEvents });
   await leaveFullscreen(contents, output);
   const saved = await setOutputPlacement(contents, output, placement);
   report.lock.normalPlacement = saved;
@@ -262,6 +309,8 @@ async function firstPhase(contents, editor) {
   assert.deepEqual(locked.present.lockedLayout.output, locked.output);
   assert(editor.isMovable() && editor.isResizable());
   assert.equal(await evaluate(output.webContents, `window.freeform.beginWindowResize('se', { x: 0, y: 0 })`), false, 'Locked output must reject resizing.');
+  assert.equal(await evaluate(output.webContents, `window.freeform.beginWindowMove({ x: 0, y: 0 })`), false, 'Locked output must reject movement.');
+  assert.equal(await evaluate(output.webContents, `document.querySelectorAll('[data-window-move]').length`), 0, 'Locked output must remove its move surface.');
   for (const key of ['x', 'y', 'width', 'height']) assert.equal(locked.present.windowPlacement[key], placement[key]);
   report.lock.presentation = nativeState(output);
   await click(contents, 'Transparent background');

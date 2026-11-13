@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resizeWindowBounds, resolveWindowPlacement } from '../../electron/presentationWindow.js';
+import { moveWindowBounds, resizeWindowBounds, resolveWindowPlacement } from '../../electron/presentationWindow.js';
 
 const displays = [
   { id: 101, workArea: { x: 0, y: 0, width: 1920, height: 1040 } },
@@ -43,6 +43,30 @@ describe('native Present window placement', () => {
 
   it('returns null without a connected display', () => {
     expect(resolveWindowPlacement(null, [], { x: 0, y: 0, width: 1500, height: 950 })).toBeNull();
+  });
+});
+
+describe('transparent editing-window movement', () => {
+  const bounds = { x: 100, y: 80, width: 1200, height: 800 };
+
+  it('moves only the window origin and preserves its size', () => {
+    expect(moveWindowBounds(bounds, { x: 60.4, y: -40.4 })).toEqual({ x: 160, y: 40, width: 1200, height: 800 });
+    expect(bounds).toEqual({ x: 100, y: 80, width: 1200, height: 800 });
+  });
+
+  it('supports negative display origins and ignores non-finite cursor deltas', () => {
+    expect(moveWindowBounds({ ...bounds, x: -320 }, { x: -80, y: 120 })).toEqual({ x: -400, y: 200, width: 1200, height: 800 });
+    expect(moveWindowBounds(bounds, { x: Number.NaN, y: Number.POSITIVE_INFINITY })).toEqual(bounds);
+  });
+
+  it('aligns fractional-scale displays to native pixels without changing size', () => {
+    const initial = { x: 40, y: 20, width: 1120, height: 672 };
+    const moved = moveWindowBounds(initial, { x: 10, y: 6.666687 }, 1.5);
+    expect(moved).toEqual({ x: 50, y: 26, width: 1120, height: 672 });
+    expect(Number.isInteger(moved.x * 1.5)).toBe(true);
+    expect(Number.isInteger(moved.y * 1.5)).toBe(true);
+    expect(moveWindowBounds(initial, { x: 11, y: 7 }, 1.25)).toEqual({ x: 52, y: 28, width: 1120, height: 672 });
+    expect(moveWindowBounds(initial, { x: 11, y: 7 }, 0)).toEqual({ x: 51, y: 27, width: 1120, height: 672 });
   });
 });
 

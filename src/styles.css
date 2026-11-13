@@ -570,6 +570,8 @@ button.history-entry:hover { background: rgba(197, 255, 195, .04); color: var(--
   .feature-guide-category button, .guide-progress span { transition: none; }
 }
 
+.window-move-surface { position: fixed; inset: 0; z-index: 290; cursor: grab; touch-action: none; }
+.window-move-surface:active { cursor: grabbing; }
 .window-resize-handle { position: fixed; z-index: 300; margin: 0; padding: 0; border: 0; background: transparent; touch-action: none; }
 .window-resize-n, .window-resize-s { left: 9px; right: 9px; height: 7px; cursor: ns-resize; }
 .window-resize-n { top: 0; }

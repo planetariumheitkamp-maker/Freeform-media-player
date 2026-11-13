@@ -46,6 +46,29 @@ export function resolveWindowPlacement(input, displays, currentBounds, minimumSi
   };
 }
 
+function alignToNativePixel(value, scaleFactor) {
+  const nearest = Math.round(value);
+  if (!Number.isFinite(scaleFactor) || scaleFactor <= 0) return nearest;
+  const isAligned = (candidate) => Math.abs(candidate * scaleFactor - Math.round(candidate * scaleFactor)) < 0.0001;
+  for (let distance = 0; distance <= 8; distance += 1) {
+    const candidates = distance === 0 ? [nearest] : [nearest - distance, nearest + distance];
+    const aligned = candidates.filter(isAligned).sort((a, b) => Math.abs(a - value) - Math.abs(b - value));
+    if (aligned.length) return aligned[0];
+  }
+  return nearest;
+}
+
+/** Move only the native window origin; media geometry and output size stay fixed. */
+export function moveWindowBounds(bounds, cursorDelta, scaleFactor = 1) {
+  // Fractional physical-pixel origins can make transparent Windows windows grow
+  // by one DIP per setPosition call. Keep both axes on the native pixel grid.
+  return {
+    ...bounds,
+    x: alignToNativePixel(finite(bounds?.x, 0) + finite(cursorDelta?.x, 0), scaleFactor),
+    y: alignToNativePixel(finite(bounds?.y, 0) + finite(cursorDelta?.y, 0), scaleFactor),
+  };
+}
+
 export const WINDOW_RESIZE_DIRECTIONS = new Set(['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']);
 
 /**

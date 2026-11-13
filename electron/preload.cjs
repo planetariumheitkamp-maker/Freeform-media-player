@@ -47,4 +47,7 @@ contextBridge.exposeInMainWorld('freeform', {
   beginWindowResize: (direction, cursor) => ipcRenderer.invoke('window:begin-resize', direction, cursor),
   updateWindowResize: (cursor) => ipcRenderer.invoke('window:update-resize', cursor),
   endWindowResize: () => ipcRenderer.invoke('window:end-resize'),
+  beginWindowMove: (cursor) => ipcRenderer.invoke('window:begin-move', cursor),
+  updateWindowMove: (cursor) => ipcRenderer.invoke('window:update-move', cursor),
+  endWindowMove: () => ipcRenderer.invoke('window:end-move'),
 });
