@@ -55,6 +55,50 @@ function leaveWindowFullscreen(window) {
   });
 }
 
+function restoreNormalWindow(window) {
+  if (window.isDestroyed()) return Promise.resolve(false);
+  if (!window.isMaximized()) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let settled = false;
+    let timeout;
+    const cleanup = () => {
+      clearTimeout(timeout);
+      window.removeListener('unmaximize', finish);
+      window.removeListener('closed', finish);
+    };
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(!window.isDestroyed() && !window.isMaximized());
+    };
+    timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (window.isDestroyed()) {
+        resolve(false);
+        return;
+      }
+      // Some transparent Windows outputs remain maximized after fullscreen exit.
+      // Restore the saved normal bounds if the native unmaximize transition stalls.
+      applyingWindowPlacement = true;
+      try {
+        window.restore();
+        window.setMaximumSize(0, 0);
+        window.setBounds(window.getNormalBounds());
+      } finally {
+        applyingWindowPlacement = false;
+      }
+      resolve(!window.isMaximized());
+    }, 1000);
+    window.once('unmaximize', finish);
+    window.once('closed', finish);
+    window.unmaximize();
+    if (!window.isMaximized()) finish();
+  });
+}
+
 function getPresentationWindowPlacement() {
   if (!presentationWindow) return null;
   if (presentationNormalPlacement) return { ...presentationNormalPlacement };
@@ -221,14 +265,17 @@ function registerProjectHandlers() {
 
   ipcMain.handle('window:fullscreen', async (event, value) => {
     if (!canControlPresentation(event.senderFrame)) throw new Error('Only Freeform can change the output window.');
+    const output = presentationWindow;
     finishWindowResize();
     finishWindowMove();
     if (value) {
       // Keep normal output bounds independently of the fullscreen transition.
       presentationNormalPlacement ??= getPresentationWindowPlacement();
-      presentationWindow?.setFullScreen(true);
+      output.setFullScreen(true);
     } else {
-      presentationWindow?.setFullScreen(false);
+      await leaveWindowFullscreen(output);
+      if (presentationWindow !== output || output.isDestroyed()) return;
+      await restoreNormalWindow(output);
       presentationNormalPlacement = null;
     }
   });
@@ -238,26 +285,29 @@ function registerProjectHandlers() {
     return getPresentationWindowPlacement();
   });
 
-  ipcMain.handle('window:set-placement', (event, input) => {
+  ipcMain.handle('window:set-placement', async (event, input) => {
     if (!canControlPresentation(event.senderFrame)) return null;
+    const output = presentationWindow;
     finishWindowMove();
     const placement = resolveWindowPlacement(
       input,
       screen.getAllDisplays(),
-      presentationWindow.getNormalBounds(),
+      output.getNormalBounds(),
       PRESENT_WINDOW_MINIMUM_SIZE,
     );
     if (!placement) return null;
+    await leaveWindowFullscreen(output);
+    if (presentationWindow !== output || output.isDestroyed()) return null;
+    await restoreNormalWindow(output);
     applyingWindowPlacement = true;
     try {
-      if ((presentationWindowFullscreen || presentationWindow.isFullScreen())) presentationWindow.setFullScreen(false);
       // Unlocking cannot clear this transparent window's native size limits.
-      presentationWindow.setMaximumSize(0, 0);
-      presentationWindow.setBounds(placement);
+      output.setMaximumSize(0, 0);
+      output.setBounds(placement);
     } finally {
       applyingWindowPlacement = false;
     }
-    return { ...presentationWindow.getNormalBounds(), displayId: placement.displayId };
+    return { ...output.getNormalBounds(), displayId: placement.displayId };
   });
 
   ipcMain.handle('window:set-locked', (event, value) => {
@@ -316,7 +366,8 @@ function registerProjectHandlers() {
     finishWindowMove();
     if (presentationWindowFullscreen || output.isFullScreen()) await leaveWindowFullscreen(output);
     if (presentationWindow !== output || output.isDestroyed() || presentationWindowLocked) return false;
-    if (output.isMaximized()) output.unmaximize();
+    if (!(await restoreNormalWindow(output))) return false;
+    if (presentationWindow !== output || output.isDestroyed() || presentationWindowLocked) return false;
     presentationNormalPlacement = null;
     const nativeCursor = screen.getCursorScreenPoint();
     windowMoveSession = {

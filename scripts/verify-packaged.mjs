@@ -268,6 +268,17 @@ try {
     return output?.isMovable();
   })).toBe(true);
   await expect(outputPage.locator('[data-window-move]')).toHaveCount(1);
+  const outputNativeState = () => electronApp.evaluate(({ BrowserWindow }) => {
+    const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
+    return {
+      fullScreen: output.isFullScreen(),
+      maximized: output.isMaximized(),
+      movable: output.isMovable(),
+      resizable: output.isResizable(),
+      bounds: output.getBounds(),
+      normalBounds: output.getNormalBounds(),
+    };
+  });
   const windowedOutput = electronApp.evaluate(({ BrowserWindow }) => {
     const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
     return new Promise((resolve) => {
@@ -278,23 +289,9 @@ try {
   });
   await outputPage.evaluate(() => window.freeform.setFullscreen(false));
   assert(await windowedOutput, 'The packaged output must emit leave-full-screen before windowed resize checks.');
-  await electronApp.evaluate(({ BrowserWindow }) => {
-    const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
-    if (output.isMaximized()) output.unmaximize();
-  });
   // Windows clears the maximized flag asynchronously after leaving fullscreen.
-  await expect.poll(() => electronApp.evaluate(({ BrowserWindow }) => {
-    const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
-    return !output.isFullScreen() && !output.isMaximized();
-  })).toBe(true);
-  const normalOutputState = await electronApp.evaluate(({ BrowserWindow }) => {
-    const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
-    return {
-      fullScreen: output.isFullScreen(),
-      maximized: output.isMaximized(),
-      bounds: output.getBounds(),
-    };
-  });
+  await expect.poll(outputNativeState).toMatchObject({ fullScreen: false, maximized: false });
+  const normalOutputState = await outputNativeState();
   assert(!normalOutputState.fullScreen && !normalOutputState.maximized,
     `Output must be normal and unmaximized before resize: ${JSON.stringify(normalOutputState)}`);
   const beforeOutputResize = await electronApp.evaluate(({ BrowserWindow }) => {
@@ -311,10 +308,12 @@ try {
     `Packaged output resize must start in a normal window: ${JSON.stringify({ normalOutputState, resizedOutput })}`);
   assert.equal(resizedOutput.after.width, beforeOutputResize.width + 40);
   assert.equal(resizedOutput.after.height, beforeOutputResize.height + 30);
-  const beforeOutputMove = await electronApp.evaluate(({ BrowserWindow }) => {
+  await electronApp.evaluate(({ BrowserWindow }) => {
     const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
-    return output.getBounds();
+    output.maximize();
   });
+  await expect.poll(outputNativeState).toMatchObject({ maximized: true });
+  const beforeOutputMove = (await outputNativeState()).normalBounds;
   const beforeMoveProject = await outputPage.evaluate(async () => JSON.parse(await window.freeform.getPresentationProject()));
   const movedOutput = await outputPage.evaluate(async () => {
     const started = await window.freeform.beginWindowMove({ x: 100, y: 100 });
@@ -323,11 +322,12 @@ try {
     return { started, after };
   });
   const afterMoveProject = await outputPage.evaluate(async () => JSON.parse(await window.freeform.getPresentationProject()));
-  assert(movedOutput.started);
+  assert(movedOutput.started, `Dragging must restore a maximized output before moving: ${JSON.stringify(await outputNativeState())}`);
   assert.equal(movedOutput.after.x, beforeOutputMove.x + 60);
   assert.equal(movedOutput.after.y, beforeOutputMove.y + 40);
   assert.equal(movedOutput.after.width, beforeOutputMove.width);
   assert.equal(movedOutput.after.height, beforeOutputMove.height);
+  await expect.poll(outputNativeState).toMatchObject({ fullScreen: false, maximized: false });
   assert.deepEqual(afterMoveProject.players, beforeMoveProject.players);
   assert.deepEqual(afterMoveProject.output, beforeMoveProject.output);
   checks.push('Output locking rejects movement/resizing and leaves the editor controllable; unlocked IPC moves only x/y and resizes real bounds.');
