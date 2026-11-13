@@ -334,6 +334,29 @@ try {
   await expect.poll(outputNativeState).toMatchObject({ fullScreen: false, maximized: false });
   assert.deepEqual(afterMoveProject.players, beforeMoveProject.players);
   assert.deepEqual(afterMoveProject.output, beforeMoveProject.output);
+  const beforeFullscreenDrag = (await outputNativeState()).normalBounds;
+  await electronApp.evaluate(({ BrowserWindow }) => {
+    const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
+    output.maximize();
+  });
+  await expect.poll(outputNativeState).toMatchObject({ maximized: true });
+  await outputPage.evaluate(() => window.freeform.setFullscreen(true));
+  await outputPage.evaluate(() => window.freeform.setFullscreen(false));
+  const fullscreenDrag = await outputPage.evaluate(async () => {
+    const started = await window.freeform.beginWindowMove({ x: 200, y: 200 });
+    const after = started ? await window.freeform.updateWindowMove({ x: 220, y: 210 }) : null;
+    await window.freeform.endWindowMove();
+    return { started, after };
+  });
+  assert(fullscreenDrag.started, `Maximized fullscreen exit must preserve the normal output: ${JSON.stringify(await outputNativeState())}`);
+  assert.equal(fullscreenDrag.after.x, beforeFullscreenDrag.x + 20);
+  assert.equal(fullscreenDrag.after.y, beforeFullscreenDrag.y + 10);
+  assert.equal(fullscreenDrag.after.width, beforeFullscreenDrag.width);
+  assert.equal(fullscreenDrag.after.height, beforeFullscreenDrag.height);
+  await expect.poll(outputNativeState).toMatchObject({ fullScreen: false, maximized: false });
+  const afterFullscreenProject = await outputPage.evaluate(async () => JSON.parse(await window.freeform.getPresentationProject()));
+  assert.deepEqual(afterFullscreenProject.players, beforeMoveProject.players);
+  assert.deepEqual(afterFullscreenProject.output, beforeMoveProject.output);
   checks.push('Output locking rejects movement/resizing and leaves the editor controllable; unlocked IPC moves only x/y and resizes real bounds.');
 
   await page.screenshot({ path: path.join(outputDirectory, 'desktop-editor-present.png') });

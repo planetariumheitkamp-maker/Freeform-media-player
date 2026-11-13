@@ -55,48 +55,33 @@ function leaveWindowFullscreen(window) {
   });
 }
 
-function restoreNormalWindow(window) {
-  if (window.isDestroyed()) return Promise.resolve(false);
-  if (!window.isMaximized()) return Promise.resolve(true);
-  return new Promise((resolve) => {
-    let settled = false;
-    let timeout;
-    const cleanup = () => {
-      clearTimeout(timeout);
-      window.removeListener('unmaximize', finish);
-      window.removeListener('closed', finish);
-    };
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve(!window.isDestroyed() && !window.isMaximized());
-    };
-    timeout = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      if (window.isDestroyed()) {
-        resolve(false);
-        return;
-      }
-      // Some transparent Windows outputs remain maximized after fullscreen exit.
-      // Restore the saved normal bounds if the native unmaximize transition stalls.
-      applyingWindowPlacement = true;
-      try {
-        window.restore();
-        window.setMaximumSize(0, 0);
-        window.setBounds(window.getNormalBounds());
-      } finally {
-        applyingWindowPlacement = false;
-      }
-      resolve(!window.isMaximized());
-    }, 1000);
-    window.once('unmaximize', finish);
-    window.once('closed', finish);
-    window.unmaximize();
-    if (!window.isMaximized()) finish();
-  });
+function sameWindowBounds(first, second) {
+  return ['x', 'y', 'width', 'height'].every((key) => first?.[key] === second?.[key]);
+}
+
+async function restoreNormalWindow(window, savedPlacement = presentationNormalPlacement ?? window.getNormalBounds()) {
+  const placement = savedPlacement ? { ...savedPlacement } : null;
+  const isNormal = () => !window.isDestroyed() && !window.isMaximized()
+    && (!placement || sameWindowBounds(window.getBounds(), placement));
+  // Transparent Windows windows may not emit unmaximize. Poll the real native
+  // state for at most five seconds instead of trusting that event or a stale flag.
+  for (let attempt = 0; attempt < 20 && !window.isDestroyed(); attempt += 1) {
+    if (isNormal()) return true;
+    applyingWindowPlacement = true;
+    try {
+      // Unlocking can leave native size limits behind. Electron also reuses
+      // its transparent-window restore rectangle for maximize and fullscreen,
+      // so explicitly restore Freeform's independently saved normal placement.
+      window.setMaximumSize(0, 0);
+      window.unmaximize();
+      if (placement) window.setBounds(placement);
+    } finally {
+      applyingWindowPlacement = false;
+    }
+    if (isNormal()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return isNormal();
 }
 
 function getPresentationWindowPlacement() {
@@ -307,6 +292,7 @@ function registerProjectHandlers() {
     } finally {
       applyingWindowPlacement = false;
     }
+    presentationNormalPlacement = { ...placement };
     return { ...output.getNormalBounds(), displayId: placement.displayId };
   });
 
@@ -364,9 +350,10 @@ function registerProjectHandlers() {
     const output = presentationWindow;
     finishWindowResize();
     finishWindowMove();
+    const normalPlacement = getPresentationWindowPlacement();
     if (presentationWindowFullscreen || output.isFullScreen()) await leaveWindowFullscreen(output);
     if (presentationWindow !== output || output.isDestroyed() || presentationWindowLocked) return false;
-    if (!(await restoreNormalWindow(output))) return false;
+    if (!(await restoreNormalWindow(output, normalPlacement))) return false;
     if (presentationWindow !== output || output.isDestroyed() || presentationWindowLocked) return false;
     presentationNormalPlacement = null;
     const nativeCursor = screen.getCursorScreenPoint();
