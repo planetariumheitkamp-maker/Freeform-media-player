@@ -18,10 +18,11 @@ let started = false;
 let reference;
 const save = () => fs.writeFile(reportPath, JSON.stringify(report, null, 2));
 const evaluate = (contents, code) => contents.executeJavaScript(code, true);
-const roleWindow = (role) => BrowserWindow.getAllWindows().find(window => {
+const roleWindow = (role, kind = null) => BrowserWindow.getAllWindows().find(window => {
   try {
     const url = new URL(window.webContents.getURL());
-    return url.protocol === 'file:' && url.searchParams.get('present') === (role === 'present' ? '1' : null);
+    return url.protocol === 'file:' && url.searchParams.get('present') === (role === 'present' ? '1' : null)
+      && (!kind || url.searchParams.get('window-kind') === kind);
   } catch { return false; }
 });
 const nativeState = (window) => ({
@@ -84,6 +85,17 @@ async function enter(contents) {
   await wait(700);
   return output;
 }
+async function replacementOutput(previous, kind) {
+  await waitNative(() => {
+    const candidate = roleWindow('present', kind);
+    return Boolean(candidate && candidate !== previous);
+  }, `Create the ${kind} replacement output`, 30000);
+  const output = roleWindow('present', kind);
+  await waitFor(output.webContents, `document.querySelector('.app-shell')?.dataset.windowKind === '${kind}' && Boolean(document.querySelector('canvas.warp-canvas'))`, `${kind} output canvas`, 30000);
+  await waitNative(() => previous.isDestroyed(), 'Close the replaced output');
+  await wait(700);
+  return output;
+}
 async function leaveFullscreen(contents, output) {
   await evaluate(contents, `window.freeform.setFullscreen(false)`);
   await waitNative(() => !output.isFullScreen(), 'Windowed output');
@@ -91,8 +103,13 @@ async function leaveFullscreen(contents, output) {
 }
 async function setOutputPlacement(contents, output, placement) {
   await evaluate(contents, `window.freeform.setWindowPlacement(${JSON.stringify(placement)})`);
-  await waitNative(() => ['x', 'y', 'width', 'height'].every(key => output.getBounds()[key] === placement[key]), 'Output placement');
-  await waitFor(output.webContents, `innerWidth === ${placement.width} && innerHeight === ${placement.height}`, 'Output renderer matches native bounds');
+  const kind = new URL(output.webContents.getURL()).searchParams.get('window-kind');
+  // At fractional Windows scaling, both native frames and transparent overlays
+  // can round a restored outer bound by one DIP. Movement itself remains exact.
+  const tolerance = process.platform === 'win32' ? 1 : 0;
+  await waitNative(() => ['x', 'y', 'width', 'height'].every(key => Math.abs(output.getBounds()[key] - placement[key]) <= tolerance), `${kind} output placement`);
+  const content = output.getContentBounds();
+  await waitFor(output.webContents, `innerWidth === ${content.width} && innerHeight === ${content.height}`, 'Output renderer matches native content bounds');
   return evaluate(contents, 'window.freeform.getWindowPlacement()');
 }
 async function readProject(contents) {
@@ -170,6 +187,8 @@ async function exerciseOutputMove(contents, output, delta, { fullscreen = false,
   if (fullscreen) assert.equal(fullscreenEvents.at(-1), 'enter', 'The output must emit enter-full-screen before movement.');
   else assert(!output.isFullScreen(), 'The output must start windowed before ordinary movement.');
   assert.equal(await evaluate(output.webContents, `document.querySelectorAll('[data-window-move]').length`), 1, 'The unlocked output must expose its move surface.');
+  const kind = await evaluate(output.webContents, `document.querySelector('.app-shell').dataset.windowKind`);
+  const native = kind === 'native';
   const before = output.getBounds();
   const normalBefore = normalBounds ?? output.getNormalBounds();
   const projectBefore = JSON.parse(await evaluate(output.webContents, 'window.freeform.getPresentationProject()'));
@@ -198,11 +217,17 @@ async function exerciseOutputMove(contents, output, delta, { fullscreen = false,
   const after = output.getBounds();
   const expected = fullscreen ? normalBefore : before;
   const pointerTrace = await evaluate(output.webContents, 'window.__freeformNativeMoveTrace');
-  const pointerDiagnostics = { before, normalBefore, after, delta, scale, start, pointerResult, nativeCursor: screen.getCursorScreenPoint(), pointerTrace };
-  assert(Math.abs(after.x - expected.x - delta.x) <= 3, `Windows pointer drag must move output x: ${JSON.stringify(pointerDiagnostics)}`);
-  assert(Math.abs(after.y - expected.y - delta.y) <= 3, `Windows pointer drag must move output y: ${JSON.stringify(pointerDiagnostics)}`);
-  assert.equal(after.width, expected.width, 'Moving must preserve output width.');
-  assert.equal(after.height, expected.height, 'Moving must preserve output height.');
+  const pointerDiagnostics = { kind, before, normalBefore, after, delta, scale, start, pointerResult, nativeCursor: screen.getCursorScreenPoint(), pointerTrace };
+  // Native Windows dragging owns fractional-DIP rounding. A small delta tolerance
+  // still rejects the snap-back failure while leaving overlay checks exact.
+  const movementTolerance = native ? 16 : 3;
+  const sizeTolerance = native ? 1 : 0;
+  assert(Math.abs(after.x - expected.x - delta.x) <= movementTolerance, `Windows pointer drag must move output x: ${JSON.stringify(pointerDiagnostics)}`);
+  assert(Math.abs(after.y - expected.y - delta.y) <= movementTolerance, `Windows pointer drag must move output y: ${JSON.stringify(pointerDiagnostics)}`);
+  assert(Math.abs(after.width - expected.width) <= sizeTolerance, 'Moving must preserve output width within native frame rounding.');
+  assert(Math.abs(after.height - expected.height) <= sizeTolerance, 'Moving must preserve output height within native frame rounding.');
+  await wait(400);
+  assert.deepEqual(output.getBounds(), after, 'The output must stay at its final position without snapping back.');
   const projectAfter = JSON.parse(await evaluate(output.webContents, 'window.freeform.getPresentationProject()'));
   assert.deepEqual(projectAfter.players, projectBefore.players, 'Native window movement must not change player geometry.');
   assert.deepEqual(projectAfter.output, projectBefore.output, 'Native window movement must not change project output size.');
@@ -210,38 +235,48 @@ async function exerciseOutputMove(contents, output, delta, { fullscreen = false,
   return { before, normalBefore, after, delta, fullscreenEvents: [...fullscreenEvents], projectGeometryUnchanged: true, pointerInput: 'Windows' };
 }
 async function exerciseOutputResize(contents, output, placement) {
-  assert.equal(await evaluate(output.webContents, `document.querySelectorAll('[data-window-resize]').length`), 8, 'The output must expose eight resize handles.');
+  const kind = await evaluate(output.webContents, `document.querySelector('.app-shell').dataset.windowKind`);
+  const native = kind === 'native';
+  const handleCount = native ? 0 : 8;
+  assert.equal(await evaluate(output.webContents, `document.querySelectorAll('[data-window-resize]').length`), handleCount, `${kind} output resize surfaces`);
   // Keep the southeast handle inside the physical desktop throughout the drag.
   // The placement-under-test intentionally fills the usable width for lock/restart coverage.
   const pointerPlacement = { ...placement, x: placement.x - 120, y: placement.y + 20, height: placement.height - 80 };
   await setOutputPlacement(contents, output, pointerPlacement);
   const before = output.getBounds();
-  const apiAfter = await evaluate(output.webContents, `(async () => {
-    const started = await window.freeform.beginWindowResize('se', { x: 100, y: 100 });
-    if (!started) return { started };
-    const resized = await window.freeform.updateWindowResize({ x: 160, y: 140 });
-    await window.freeform.endWindowResize();
-    return { started, resized };
-  })()`);
-  assert.equal(apiAfter.started, true);
-  assert.equal(apiAfter.resized.width, before.width + 60);
-  assert.equal(apiAfter.resized.height, before.height + 40);
-  await setOutputPlacement(contents, output, pointerPlacement);
+  let apiAfter = null;
+  if (native) {
+    apiAfter = await evaluate(output.webContents, `window.freeform.beginWindowResize('se', { x: 100, y: 100 })`);
+    assert.equal(apiAfter, false, 'Native output must leave resizing to the Windows frame.');
+  } else {
+    apiAfter = await evaluate(output.webContents, `(async () => {
+      const started = await window.freeform.beginWindowResize('se', { x: 100, y: 100 });
+      if (!started) return { started };
+      const resized = await window.freeform.updateWindowResize({ x: 160, y: 140 });
+      await window.freeform.endWindowResize();
+      return { started, resized };
+    })()`);
+    assert.equal(apiAfter.started, true);
+    assert.equal(apiAfter.resized.width, before.width + 60);
+    assert.equal(apiAfter.resized.height, before.height + 40);
+    await setOutputPlacement(contents, output, pointerPlacement);
+  }
   output.focus();
   output.moveTop();
   await wait(500);
   const scale = screen.getDisplayMatching(before).scaleFactor;
-  const start = { x: Math.round((before.x + before.width - 4) * scale), y: Math.round((before.y + before.height - 4) * scale) };
+  const inset = native ? 0 : 4;
+  const start = { x: Math.round((before.x + before.width - inset) * scale), y: Math.round((before.y + before.height - inset) * scale) };
   await executeFile(path.join(root, 'test-results', 'native-pointer-drag.exe'), [String(start.x), String(start.y), String(Math.round(60 * scale)), String(Math.round(40 * scale))], { timeout: 15000 });
   await wait(350);
   const after = output.getBounds();
-  assert(Math.abs(after.width - before.width - 60) <= 2, `Windows pointer drag must resize output width: ${JSON.stringify({ before, after })}`);
-  assert(Math.abs(after.height - before.height - 40) <= 2, `Windows pointer drag must resize output height: ${JSON.stringify({ before, after })}`);
+  assert(Math.abs(after.width - before.width - 60) <= 2, `Windows pointer drag must resize ${kind} output width: ${JSON.stringify({ before, after })}`);
+  assert(Math.abs(after.height - before.height - 40) <= 2, `Windows pointer drag must resize ${kind} output height: ${JSON.stringify({ before, after })}`);
   assert.equal(after.x, before.x);
   assert.equal(after.y, before.y);
-  await captureRenderer(output.webContents, 'renderer-output-after-resize');
+  await captureRenderer(output.webContents, `renderer-output-after-${kind}-resize`);
   await setOutputPlacement(contents, output, placement);
-  return { handleCount: 8, before, apiAfter, after, nativeResizable: output.isResizable(), pointerInput: 'Windows' };
+  return { kind, handleCount, before, apiAfter, after, nativeResizable: output.isResizable(), pointerInput: 'Windows' };
 }
 async function firstPhase(contents, editor) {
   const area = screen.getDisplayMatching(editor.getNormalBounds()).workArea;
@@ -257,20 +292,24 @@ async function firstPhase(contents, editor) {
   assert(report.lock.editorStyle.caption && report.lock.editorStyle.minimizeBox && report.lock.editorStyle.maximizeBox && report.lock.editorStyle.systemMenu, 'The editor must retain the Windows title bar and ordinary window controls.');
   await captureRenderer(contents, 'renderer-editing');
   report.media = { loaded: await loadTimedMedia(contents, root, { evaluate, click, waitFor }) };
-  const output = await enter(contents);
+  let output = await enter(contents);
   report.lock.outputStyle = await windowStyle(output);
   assert(!report.lock.outputStyle.caption, 'The output must be frameless.');
+  assert.equal(await evaluate(output.webContents, `document.querySelector('.app-shell').dataset.windowKind`), 'native');
   assert(editor.isMovable() && editor.isResizable());
   assert.equal(await evaluate(output.webContents, `document.querySelectorAll('.top-bar, .inspector, .source-rail, .present-controls').length`), 0, 'The output must not contain editing or Present controls.');
-  assert.equal(await evaluate(output.webContents, `document.querySelectorAll('[data-window-resize]').length`), 8);
+  assert.equal(await evaluate(output.webContents, `document.querySelectorAll('[data-window-resize]').length`), 0);
+  assert.equal(await evaluate(output.webContents, `document.querySelector('[data-window-move]').classList.contains('is-native')`), true);
   const fullscreenEvents = [];
   output.on('enter-full-screen', () => fullscreenEvents.push('enter'));
   output.on('leave-full-screen', () => fullscreenEvents.push('leave'));
   await leaveFullscreen(contents, output);
-  await setOutputPlacement(contents, output, placement);
+  Object.assign(placement, await setOutputPlacement(contents, output, placement));
+  report.lock.outputStyle = await windowStyle(output);
+  assert(report.lock.outputStyle.thickFrame, 'Windowed output must have a native Windows sizing frame.');
   const earlyMovePlacement = { ...placement, x: placement.x - 120, y: placement.y + 20, height: placement.height - 80 };
   report.lock.outputMove = await exerciseOutputMove(contents, output, { x: 60, y: 40 }, { placement: earlyMovePlacement });
-  await setOutputPlacement(contents, output, placement);
+  report.lock.outputNativeResize = await exerciseOutputResize(contents, output, placement);
   const normalBeforeFullscreen = output.getNormalBounds();
   output.focus();
   output.moveTop();
@@ -278,16 +317,15 @@ async function firstPhase(contents, editor) {
   output.setFullScreen(true);
   await wait(1200);
   report.lock.fullscreenAttempt = { events: [...fullscreenEvents], fullScreenable: output.isFullScreenable(), state: nativeState(output) };
-  assert.equal(fullscreenEvents.at(-1), 'enter', `Fullscreen output before dragging: ${JSON.stringify(report.lock.fullscreenAttempt)}`);
-  report.lock.fullscreenMove = await exerciseOutputMove(contents, output, { x: -80, y: 60 }, { fullscreen: true, normalBounds: normalBeforeFullscreen, fullscreenEvents });
+  assert.equal(fullscreenEvents.at(-1), 'enter', `Fullscreen output before choosing Windowed: ${JSON.stringify(report.lock.fullscreenAttempt)}`);
+  await controls(contents, true);
+  await click(contents, 'Output fullscreen');
+  await controls(contents, false);
+  await waitNative(() => !output.isFullScreen() && !output.isMaximized(), 'Native Windowed control restores the output');
+  report.lock.nativeWindowedMove = await exerciseOutputMove(contents, output, { x: -80, y: 60 }, { normalBounds: normalBeforeFullscreen });
   await leaveFullscreen(contents, output);
   const saved = await setOutputPlacement(contents, output, placement);
   report.lock.normalPlacement = saved;
-  await setOutputPlacement(contents, output, area);
-  assert(output.isMaximized(), 'The exact Windows work-area rectangle must reproduce Electron\'s geometric maximized state.');
-  report.lock.workAreaMove = await exerciseOutputMove(contents, output, { x: -60, y: 40 });
-  assert(!output.isMaximized(), 'Real pointer movement must leave the geometric work-area state.');
-  await setOutputPlacement(contents, output, placement);
   Object.assign(report.media, await exerciseMediaPlayback(contents, output, { evaluate, waitFor, waitNative }));
   await referenceWindow(output);
   await captureDesktop(output, 'desktop-reference');
@@ -330,16 +368,26 @@ async function firstPhase(contents, editor) {
   assert.equal(await evaluate(output.webContents, `window.freeform.beginWindowResize('se', { x: 0, y: 0 })`), false, 'Locked output must reject resizing.');
   assert.equal(await evaluate(output.webContents, `window.freeform.beginWindowMove({ x: 0, y: 0 })`), false, 'Locked output must reject movement.');
   assert.equal(await evaluate(output.webContents, `document.querySelectorAll('[data-window-move]').length`), 0, 'Locked output must remove its move surface.');
-  for (const key of ['x', 'y', 'width', 'height']) assert.equal(locked.present.windowPlacement[key], placement[key]);
+  for (const key of ['x', 'y', 'width', 'height']) assert.equal(locked.present.windowPlacement[key], saved[key]);
   report.lock.presentation = nativeState(output);
   await click(contents, 'Transparent background');
+  output = await replacementOutput(output, 'overlay');
   await waitFor(output.webContents, `document.querySelector('canvas.warp-canvas').dataset.transparency === 'native'`, 'Output transparency');
+  await waitNative(() => !output.isMovable() && !output.isResizable(), 'Replacement preserves the output lock');
+  const overlayProject = JSON.parse(await evaluate(output.webContents, 'window.freeform.getPresentationProject()'));
+  assert.deepEqual(overlayProject.players, locked.players, 'Overlay replacement preserves player geometry and visual settings.');
+  assert.equal(await evaluate(output.webContents, `document.querySelectorAll('[data-window-resize]').length`), 8);
+  assert((await windowStyle(output)).thickFrame === false, 'Transparent overlay must not use the native sizing frame.');
   await controls(contents, false);
   output.moveTop();
   await wait(900);
   const transparent = await captureDesktop(output, 'desktop-transparent');
   await controls(contents, true);
   await click(contents, 'Transparent background');
+  output = await replacementOutput(output, 'native');
+  await waitFor(output.webContents, `document.querySelector('canvas.warp-canvas').dataset.transparency === 'opaque'`, 'Native output opacity');
+  await waitNative(() => !output.isMovable() && !output.isResizable(), 'Native replacement preserves the output lock');
+  assert.equal(await evaluate(output.webContents, `document.querySelectorAll('[data-window-resize]').length`), 0);
   await controls(contents, false);
   output.moveTop();
   await wait(900);
@@ -352,6 +400,8 @@ async function firstPhase(contents, editor) {
   await captureRenderer(output.webContents, 'canvas-before-ambient');
   await controls(contents, true);
   await click(contents, 'Transparent background');
+  output = await replacementOutput(output, 'overlay');
+  await waitFor(output.webContents, `document.querySelector('canvas.warp-canvas').dataset.transparency === 'native'`, 'Restore overlay transparency');
   await click(contents, 'Ambient lighting');
   await click(contents, 'Edge matched');
   await range(contents, 'Ambient intensity', 1.4);
@@ -378,6 +428,22 @@ async function firstPhase(contents, editor) {
   await click(contents, 'Layout + window');
   await waitNative(() => output.isMovable() && output.isResizable(), 'Unlock output');
   await controls(contents, false);
+  const overlayFullscreenEvents = [];
+  output.on('enter-full-screen', () => overlayFullscreenEvents.push('enter'));
+  output.on('leave-full-screen', () => overlayFullscreenEvents.push('leave'));
+  const overlayNormalBounds = output.getNormalBounds();
+  await evaluate(contents, 'window.freeform.setFullscreen(true)');
+  await wait(1200);
+  assert.equal(overlayFullscreenEvents.at(-1), 'enter', 'Overlay must enter fullscreen before choosing Windowed.');
+  assert.equal(await evaluate(output.webContents, 'window.freeform.beginWindowMove({ x: 640, y: 400 })'), false, 'Transparent overlay movement requires Output windowed.');
+  await leaveFullscreen(contents, output);
+  assert.equal(overlayFullscreenEvents.at(-1), 'leave', 'Output windowed must restore the transparent overlay.');
+  report.lock.overlayWindowedMove = await exerciseOutputMove(contents, output, { x: -80, y: 60 }, { normalBounds: overlayNormalBounds, fullscreenEvents: overlayFullscreenEvents });
+  await setOutputPlacement(contents, output, area);
+  assert(output.isMaximized(), 'The transparent work-area rectangle must reproduce Electron\'s geometric maximized state.');
+  report.lock.workAreaMove = await exerciseOutputMove(contents, output, { x: -60, y: 40 });
+  assert(!output.isMaximized(), 'Overlay pointer movement must leave the geometric work-area state.');
+  await setOutputPlacement(contents, output, placement);
   report.lock.outputResize = await exerciseOutputResize(contents, output, placement);
   await controls(contents, true);
   await click(contents, 'Exit');
@@ -431,7 +497,9 @@ async function secondPhase(contents, editor) {
   assert(editor.isMovable() && editor.isResizable());
   const native = nativeState(output);
   const placement = await evaluate(contents, 'window.freeform.getWindowPlacement()');
-  for (const key of ['x', 'y', 'width', 'height']) assert.equal(placement[key], report.restart.savedPlacement[key], `Restored output ${key}`);
+  // Restart can cross a native-pixel rounding boundary at fractional display
+  // scaling; tolerate two DIPs while still rejecting any material snap-back.
+  for (const key of ['x', 'y', 'width', 'height']) assert(Math.abs(placement[key] - report.restart.savedPlacement[key]) <= 2, `Restored output ${key}: ${JSON.stringify({ restored: placement, saved: report.restart.savedPlacement })}`);
   report.restart.restored = { project: restored.present, output: restored.output, native, placement, editorStyle: await windowStyle(editor) };
   await waitFor(contents, `document.querySelector('.media-layer video')?.readyState >= 2`, 'Restore editor media after restart', 30000);
   await evaluate(contents, `(() => {

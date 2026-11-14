@@ -344,7 +344,7 @@ export const FEATURE_GUIDE_TOPICS: readonly FeatureGuideTopic[] = [
       {
         title: 'Open the separate output and floating controls',
         detail: 'Choose Present in the editor’s top bar. A frameless output opens in fullscreen while the editor stays available. Press H or select Present controls in the editor to open the floating panel at the upper left.',
-        bullets: ['Drag the PRESENT / LIVE heading to move the floating panel; the reset-arrow button returns it to the upper left.', 'Drag the lower-right diagonal handle to adjust width and height. With the handle focused, use the arrow keys to resize in 16 px steps or Shift + arrow for 32 px steps. Double-click the handle or press Home to restore the default width and automatic height.', 'Use the pin button to keep controls open. Unpinned controls hide after 4.2 seconds without activity, but stay open while hovered, focused, dragged, resized, or while a media dialog is open.', 'On Windows, drag anywhere on the unlocked output to move its window. Dragging from fullscreen restores a movable normal window first and never changes player geometry. Edge and corner handles resize the output; Layout + window disables both movement and resizing. Closing the output never closes the native editor.'],
+        bullets: ['Drag the PRESENT / LIVE heading to move the floating panel; the reset-arrow button returns it to the upper left.', 'Drag the lower-right diagonal handle to adjust width and height. With the handle focused, use the arrow keys to resize in 16 px steps or Shift + arrow for 32 px steps. Double-click the handle or press Home to restore the default width and automatic height.', 'Use the pin button to keep controls open. Unpinned controls hide after 4.2 seconds without activity, but stay open while hovered, focused, dragged, resized, or while a media dialog is open.', 'On Windows, ordinary opaque output uses native OS dragging and frame-edge resizing. Choose Output fullscreen to switch to Output windowed first, then drag the unlocked output or its native edges and corners; no custom resize handles are shown. Layout + window disables movement and resizing. Transparent background instead uses an overlay with custom handles; choose Output windowed before overlay dragging or resizing. Closing the output never closes the native editor.'],
         action: { label: 'Open Present mode', target: 'present' },
       },
       {
@@ -367,8 +367,8 @@ export const FEATURE_GUIDE_TOPICS: readonly FeatureGuideTopic[] = [
       },
       {
         title: 'Reveal the actual desktop behind the output',
-        detail: 'In the desktop app, enable Transparent background in the editor’s Present controls. The output’s scene, output backdrop, and native window background become transparent; the editor remains opaque and unchanged.',
-        bullets: ['Only media and enabled ambient effects remain above windows behind the output.', 'This is real desktop transparency, not a picture of the desktop or a reduced-opacity player.', 'The browser preview disables this control because it cannot make the operating-system browser window transparent.'],
+        detail: 'In the desktop app, enable Transparent background in the editor’s Present controls. Windows recreates only the output as a transparent overlay because an existing native window cannot toggle transparency. The editor remains opaque and unchanged.',
+        bullets: ['The project, output placement, fullscreen state, lock state, and live editor synchronization carry across the output reload.', 'Only media and enabled ambient effects remain above windows behind the output. The overlay keeps custom movement and resize controls.', 'This is real desktop transparency, not a picture of the desktop or a reduced-opacity player. The browser preview disables this control.'],
         action: { label: 'Open Present mode', target: 'present' },
       },
       {

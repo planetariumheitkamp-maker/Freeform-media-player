@@ -24,6 +24,7 @@ const MAIN_WINDOW_MINIMUM_SIZE = [1080, 700];
 const PRESENT_WINDOW_MINIMUM_SIZE = [320, 240];
 let mainWindow;
 let presentationWindow;
+let presentationWindowKind = 'native';
 let presentationProject = null;
 const pendingDesktopRequests = new Map();
 let presentationWindowLocked = false;
@@ -60,13 +61,21 @@ function sameWindowBounds(first, second) {
   return ['x', 'y', 'width', 'height'].every((key) => first?.[key] === second?.[key]);
 }
 
+function sameRestoredWindowBounds(first, second) {
+  const tolerance = process.platform === 'win32' ? 1 : 0;
+  return ['x', 'y', 'width', 'height'].every((key) => Number.isFinite(first?.[key])
+    && Number.isFinite(second?.[key]) && Math.abs(first[key] - second[key]) <= tolerance);
+}
+
 function isTransparentWorkAreaRestore(window, placement) {
-  return process.platform === 'win32' && window === presentationWindow && Boolean(placement)
+  return process.platform === 'win32' && presentationWindowKind === 'overlay'
+    && window === presentationWindow && Boolean(placement)
     && sameWindowBounds(placement, screen.getDisplayMatching(placement).workArea);
 }
 
 function hasExplicitWorkAreaRestore(window) {
-  return window === presentationWindow && sameWindowBounds(presentationRestoredWorkAreaPlacement, window.getBounds());
+  return presentationWindowKind === 'overlay' && window === presentationWindow
+    && sameWindowBounds(presentationRestoredWorkAreaPlacement, window.getBounds());
 }
 
 function applyNormalWindowPlacement(window, placement) {
@@ -94,7 +103,7 @@ async function restoreNormalWindow(window, savedPlacement = presentationNormalPl
   if (window === presentationWindow) presentationRestoredWorkAreaPlacement = null;
   let restoredWorkArea = false;
   const isNormal = () => !window.isDestroyed() && (!window.isMaximized() || restoredWorkArea)
-    && (!placement || sameWindowBounds(window.getBounds(), placement));
+    && (!placement || sameRestoredWindowBounds(window.getBounds(), placement));
   // Transparent Windows windows may not emit unmaximize. Poll the real native
   // state for at most five seconds instead of trusting that event or a stale flag.
   for (let attempt = 0; attempt < 20 && !window.isDestroyed(); attempt += 1) {
@@ -291,8 +300,16 @@ function registerProjectHandlers() {
     finishWindowResize();
     finishWindowMove();
     if (value) {
-      // Keep valid normal output bounds independently of the fullscreen transition.
-      presentationNormalPlacement = getPresentationWindowPlacement();
+      // The actual normal rectangle is newer than any saved placement. In particular,
+      // transparent frame rounding can differ by one DIP after an output replacement.
+      // An explicitly restored work area is the exception: Windows calls it maximized
+      // and reports the preceding normal rectangle through getNormalBounds().
+      presentationNormalPlacement = selectNormalWindowBounds(
+        hasExplicitWorkAreaRestore(output) ? presentationRestoredWorkAreaPlacement : null,
+        output.getNormalBounds(),
+        output.getBounds(),
+        getPresentationWindowPlacement(),
+      );
       presentationRestoredWorkAreaPlacement = null;
       output.setFullScreen(true);
     } else {
@@ -347,7 +364,7 @@ function registerProjectHandlers() {
   });
 
   ipcMain.handle('window:begin-resize', (event, direction, cursor) => {
-    if (!isMainWindowFrame(event.senderFrame, presentationWindow)) return false;
+    if (!isMainWindowFrame(event.senderFrame, presentationWindow) || presentationWindowKind !== 'overlay') return false;
     if (presentationWindowLocked || !WINDOW_RESIZE_DIRECTIONS.has(direction)
       || (presentationWindowFullscreen || presentationWindow.isFullScreen())
       || (presentationWindow.isMaximized() && !hasExplicitWorkAreaRestore(presentationWindow))) return false;
@@ -387,7 +404,8 @@ function registerProjectHandlers() {
   });
 
   ipcMain.handle('window:begin-move', async (event, cursor) => {
-    if (!isMainWindowFrame(event.senderFrame, presentationWindow) || presentationWindowLocked) return false;
+    if (!isMainWindowFrame(event.senderFrame, presentationWindow) || presentationWindowKind !== 'overlay'
+      || presentationWindowLocked || presentationWindowFullscreen || presentationWindow.isFullScreen()) return false;
     const output = presentationWindow;
     finishWindowResize();
     finishWindowMove();
@@ -426,9 +444,9 @@ function registerProjectHandlers() {
     const requested = moveWindowBounds(session.bounds, cursorDelta);
     const scaleFactor = screen.getDisplayMatching(requested).scaleFactor;
     const bounds = moveWindowBounds(session.bounds, cursorDelta, scaleFactor);
-    // Windows 10 can grow a window on fractional-scale displays when setPosition
-    // is used repeatedly. Supply the original drag-session size on every update.
-    presentationWindow.setBounds(bounds);
+    // A move must not resend the transparent window's fractional-DIP size:
+    // Windows can otherwise keep the origin unchanged and grow one edge instead.
+    presentationWindow.setPosition(bounds.x, bounds.y);
     const current = presentationWindow.getBounds();
     return { ...current, displayId: String(screen.getDisplayMatching(current).id) };
   });
@@ -437,9 +455,15 @@ function registerProjectHandlers() {
     if (isMainWindowFrame(event.senderFrame, presentationWindow)) finishWindowMove();
   });
 
-  ipcMain.handle('window:transparency', (event, value) => {
+  ipcMain.handle('window:transparency', async (event, value) => {
     if (!canControlPresentation(event.senderFrame)) throw new Error('Only Freeform can change output transparency.');
-    presentationWindow?.setBackgroundColor(value ? '#00000000' : '#1f1f1f');
+    const transparent = Boolean(value);
+    const nextKind = transparent ? 'overlay' : 'native';
+    if (process.platform === 'win32' && presentationWindowKind !== nextKind) {
+      await replacePresentationWindow(nextKind);
+      return;
+    }
+    presentationWindow?.setBackgroundColor(transparent ? '#00000000' : '#1f1f1f');
   });
 }
 
@@ -519,18 +543,23 @@ function registerCaptureHandlers() {
   });
 }
 
-async function loadRenderer(window, presentation = false) {
+async function loadRenderer(window, presentation = false, windowKind = 'native') {
   const rendererUrl = process.env.ELECTRON_RENDERER_URL;
   if (rendererUrl) {
     const url = new URL(rendererUrl);
-    if (presentation) url.searchParams.set('present', '1');
-    else url.searchParams.delete('present');
+    if (presentation) {
+      url.searchParams.set('present', '1');
+      url.searchParams.set('window-kind', windowKind);
+    } else {
+      url.searchParams.delete('present');
+      url.searchParams.delete('window-kind');
+    }
     await window.loadURL(url.toString());
     return;
   }
   await window.loadFile(
     path.join(__dirname, '..', 'dist', 'index.html'),
-    presentation ? { query: { present: '1' } } : undefined,
+    presentation ? { query: { present: '1', 'window-kind': windowKind } } : undefined,
   );
 }
 
@@ -570,38 +599,56 @@ async function createWindow() {
   });
 }
 
-async function createPresentationWindow() {
-  presentationWindow = new BrowserWindow({
+function requestedPresentationWindowKind() {
+  if (process.platform !== 'win32') return 'overlay';
+  try {
+    return JSON.parse(presentationProject)?.present?.transparency ? 'overlay' : 'native';
+  } catch {
+    return 'native';
+  }
+}
+
+function buildPresentationWindow(kind) {
+  const native = kind === 'native';
+  return new BrowserWindow({
     width: 1280,
     height: 720,
     minWidth: PRESENT_WINDOW_MINIMUM_SIZE[0],
     minHeight: PRESENT_WINDOW_MINIMUM_SIZE[1],
     resizable: true,
     frame: false,
+    thickFrame: native,
     show: false,
-    hasShadow: false,
+    hasShadow: native,
     title: 'Freeform Present',
-    backgroundColor: '#00000000',
-    transparent: true,
+    backgroundColor: native ? '#1f1f1f' : '#00000000',
+    transparent: !native,
     autoHideMenuBar: true,
     webPreferences: rendererPreferences(),
   });
+}
 
-  presentationWindow.on('will-move', (event) => {
-    if (presentationWindowLocked && !applyingWindowPlacement) event.preventDefault();
+function watchPresentationWindow(output) {
+  output.on('will-move', (event) => {
+    if (output === presentationWindow && presentationWindowLocked && !applyingWindowPlacement) event.preventDefault();
   });
-  presentationWindow.on('will-resize', (event) => {
-    if (presentationWindowLocked && !applyingWindowPlacement) event.preventDefault();
+  output.on('will-resize', (event) => {
+    if (output === presentationWindow && presentationWindowLocked && !applyingWindowPlacement) event.preventDefault();
   });
-  presentationWindow.on('enter-full-screen', () => {
+  output.on('enter-full-screen', () => {
+    if (output !== presentationWindow) return;
     presentationWindowFullscreen = true;
     finishWindowMove();
   });
-  presentationWindow.on('leave-full-screen', () => {
+  output.on('leave-full-screen', () => {
+    if (output !== presentationWindow) return;
     presentationWindowFullscreen = false;
     finishWindowMove();
   });
-  presentationWindow.on('closed', () => {
+  output.on('closed', () => {
+    // Replacing an output closes the old native object after the new one loads.
+    // Its lifecycle events must not clear the replacement or stop editor sync.
+    if (output !== presentationWindow) return;
     finishWindowResize();
     finishWindowMove();
     presentationWindowLocked = false;
@@ -614,13 +661,71 @@ async function createPresentationWindow() {
       mainWindow.webContents.send('presentation:closed');
     }
   });
+}
 
+async function createPresentationWindow() {
+  const kind = requestedPresentationWindowKind();
+  const output = buildPresentationWindow(kind);
+  presentationWindow = output;
+  presentationWindowKind = kind;
+  watchPresentationWindow(output);
   try {
-    await loadRenderer(presentationWindow, true);
+    await loadRenderer(output, true, kind);
+    return output;
   } catch (error) {
-    presentationWindow?.close();
+    if (!output.isDestroyed()) output.close();
     throw error;
   }
+}
+
+async function replacePresentationWindow(kind) {
+  const previous = presentationWindow;
+  if (!previous || previous.isDestroyed() || kind === presentationWindowKind) return previous;
+  const previousKind = presentationWindowKind;
+  const placement = getPresentationWindowPlacement();
+  const state = {
+    fullscreen: presentationWindowFullscreen || previous.isFullScreen(),
+    locked: presentationWindowLocked,
+    normalPlacement: presentationNormalPlacement ? { ...presentationNormalPlacement } : null,
+    restoredWorkArea: presentationRestoredWorkAreaPlacement ? { ...presentationRestoredWorkAreaPlacement } : null,
+  };
+  finishWindowResize();
+  finishWindowMove();
+
+  const output = buildPresentationWindow(kind);
+  // Authorize the new renderer before it asks for the current workspace.
+  presentationWindow = output;
+  presentationWindowKind = kind;
+  watchPresentationWindow(output);
+  try {
+    await loadRenderer(output, true, kind);
+  } catch (error) {
+    const latestProject = presentationProject;
+    // Restore identity before closing the failed window so its closed event is inert.
+    presentationWindow = previous;
+    presentationWindowKind = previousKind;
+    presentationProject = latestProject;
+    presentationWindowLocked = state.locked;
+    presentationWindowFullscreen = state.fullscreen;
+    presentationNormalPlacement = state.normalPlacement;
+    presentationRestoredWorkAreaPlacement = state.restoredWorkArea;
+    if (!output.isDestroyed()) output.close();
+    throw error;
+  }
+
+  const normalPlacement = placement ?? state.normalPlacement;
+  presentationWindowLocked = state.locked;
+  presentationWindowFullscreen = false;
+  presentationRestoredWorkAreaPlacement = null;
+  output.setMovable(!state.locked);
+  output.setResizable(!state.locked);
+  if (normalPlacement) applyNormalWindowPlacement(output, normalPlacement);
+  presentationNormalPlacement = state.fullscreen ? normalPlacement : state.normalPlacement;
+  output.show();
+  if (state.fullscreen) output.setFullScreen(true);
+  mainWindow?.focus();
+  if (!previous.isDestroyed()) previous.close();
+  return output;
 }
 
 app.whenReady().then(async () => {

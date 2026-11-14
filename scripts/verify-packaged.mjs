@@ -210,19 +210,25 @@ try {
 
   const outputOpened = electronApp.waitForEvent('window');
   await page.getByRole('button', { name: 'Present', exact: true }).click();
-  const outputPage = await outputOpened;
-  outputPage.on('pageerror', (error) => runtimeErrors.push(`Output: ${error.message}`));
-  outputPage.on('console', (message) => {
-    if (message.type() === 'error') runtimeErrors.push(`Output: ${message.text()}`);
-  });
-  const outputCanvas = outputPage.locator('canvas.warp-canvas');
+  let outputPage = await outputOpened;
+  const watchOutput = (output) => {
+    output.on('pageerror', (error) => runtimeErrors.push(`Output: ${error.message}`));
+    output.on('console', (message) => {
+      if (message.type() === 'error') runtimeErrors.push(`Output: ${message.text()}`);
+    });
+  };
+  watchOutput(outputPage);
+  let outputCanvas = outputPage.locator('canvas.warp-canvas');
   await expect(outputCanvas).toBeVisible({ timeout: 30_000 });
   await expect(outputPage.locator('.app-shell')).toHaveAttribute('data-window-role', 'present');
   await expect(outputPage).toHaveURL(/[?&]present=1/);
+  await expect(outputPage).toHaveURL(/[?&]window-kind=native/);
+  await expect(outputPage.locator('.app-shell')).toHaveAttribute('data-window-kind', 'native');
   await expect.poll(() => electronApp.windows().length).toBe(2);
   await expect(outputPage.locator('.top-bar')).toHaveCount(0);
   await expect(outputPage.locator('.present-controls')).toHaveCount(0);
-  await expect(outputPage.locator('[data-window-resize]')).toHaveCount(8);
+  await expect(outputPage.locator('[data-window-resize]')).toHaveCount(0);
+  await expect(outputPage.locator('[data-window-move]')).toHaveClass(/is-native/);
   await expect(page.locator('.app-shell')).toHaveAttribute('data-window-role', 'editor');
   await expect(page.locator('.top-bar')).toBeVisible();
   await expect(page.locator('.source-rail')).toBeVisible();
@@ -251,10 +257,19 @@ try {
   await expect(page.locator('.present-control-panel')).toBeVisible();
   await page.getByRole('button', { name: /Ambient lighting/ }).click();
   await expect(outputCanvas).toHaveAttribute('data-ambient-enabled', 'true');
+  const overlayOpened = electronApp.waitForEvent('window');
   await page.getByRole('button', { name: /Transparent background/ }).click();
+  outputPage = await overlayOpened;
+  watchOutput(outputPage);
+  outputCanvas = outputPage.locator('canvas.warp-canvas');
+  await expect(outputCanvas).toBeVisible({ timeout: 30_000 });
+  await expect(outputPage).toHaveURL(/[?&]window-kind=overlay/);
+  await expect(outputPage.locator('.app-shell')).toHaveAttribute('data-window-kind', 'overlay');
+  await expect(outputPage.locator('[data-window-resize]')).toHaveCount(8);
   await expect(outputCanvas).toHaveAttribute('data-transparency', 'native');
+  await expect.poll(() => electronApp.windows().length).toBe(2);
   await expect(page.locator('.app-shell')).not.toHaveClass(/is-present-transparent/);
-  checks.push('Native visual, grid-color, and ambient changes mirror to the output; transparency affects only the output.');
+  checks.push('Native visual, grid-color, and ambient changes mirror to the output; transparency recreates only the output as an overlay.');
 
   await page.getByRole('button', { name: /Layout \+ window/ }).click();
   await expect.poll(() => electronApp.evaluate(({ BrowserWindow }) => {
@@ -335,8 +350,10 @@ try {
   });
   assert(resizedOutput.started,
     `Packaged output resize must start in a normal window: ${JSON.stringify({ normalOutputState, resizedOutput })}`);
-  assert.equal(resizedOutput.after.width, beforeOutputResize.width + 40);
-  assert.equal(resizedOutput.after.height, beforeOutputResize.height + 30);
+  assert(Math.abs(resizedOutput.after.width - beforeOutputResize.width - 40) <= 1,
+    `Packaged overlay resize width must allow native-pixel rounding: ${JSON.stringify({ beforeOutputResize, resizedOutput })}`);
+  assert(Math.abs(resizedOutput.after.height - beforeOutputResize.height - 30) <= 1,
+    `Packaged overlay resize height must allow native-pixel rounding: ${JSON.stringify({ beforeOutputResize, resizedOutput })}`);
   await electronApp.evaluate(({ BrowserWindow }) => {
     const output = BrowserWindow.getAllWindows().find((window) => new URL(window.webContents.getURL()).searchParams.get('present') === '1');
     output.maximize();
@@ -352,10 +369,11 @@ try {
   });
   const afterMoveProject = await outputPage.evaluate(async () => JSON.parse(await window.freeform.getPresentationProject()));
   assert(movedOutput.started, `Dragging must restore a maximized output before moving: ${JSON.stringify(await outputNativeState())}`);
-  assert.equal(movedOutput.after.x, beforeOutputMove.x + 60);
-  assert.equal(movedOutput.after.y, beforeOutputMove.y + 40);
-  assert.equal(movedOutput.after.width, beforeOutputMove.width);
-  assert.equal(movedOutput.after.height, beforeOutputMove.height);
+  const moveDelta = { x: 60, y: 40, width: 0, height: 0 };
+  for (const key of ['x', 'y', 'width', 'height']) {
+    assert(Math.abs(movedOutput.after[key] - beforeOutputMove[key] - moveDelta[key]) <= 1,
+      `Maximized restore movement ${key} must allow native-pixel rounding: ${JSON.stringify({ beforeOutputMove, movedOutput })}`);
+  }
   await expect.poll(outputNativeState).toMatchObject({ fullScreen: false, maximized: false });
   assert.deepEqual(afterMoveProject.players, beforeMoveProject.players);
   assert.deepEqual(afterMoveProject.output, beforeMoveProject.output);
@@ -374,10 +392,11 @@ try {
     return { started, after };
   });
   assert(fullscreenDrag.started, `Maximized fullscreen exit must preserve the normal output: ${JSON.stringify(await outputNativeState())}`);
-  assert.equal(fullscreenDrag.after.x, beforeFullscreenDrag.x + 20);
-  assert.equal(fullscreenDrag.after.y, beforeFullscreenDrag.y + 10);
-  assert.equal(fullscreenDrag.after.width, beforeFullscreenDrag.width);
-  assert.equal(fullscreenDrag.after.height, beforeFullscreenDrag.height);
+  const fullscreenDelta = { x: 20, y: 10, width: 0, height: 0 };
+  for (const key of ['x', 'y', 'width', 'height']) {
+    assert(Math.abs(fullscreenDrag.after[key] - beforeFullscreenDrag[key] - fullscreenDelta[key]) <= 1,
+      `Fullscreen restore movement ${key} must allow native-pixel rounding: ${JSON.stringify({ beforeFullscreenDrag, fullscreenDrag })}`);
+  }
   await expect.poll(outputNativeState).toMatchObject({ fullScreen: false, maximized: false });
   const afterFullscreenProject = await outputPage.evaluate(async () => JSON.parse(await window.freeform.getPresentationProject()));
   assert.deepEqual(afterFullscreenProject.players, beforeMoveProject.players);

@@ -2,6 +2,7 @@ import {
   GripHorizontal,
   Library,
   Lock,
+  Maximize2,
   Minimize2,
   Monitor,
   MoveDiagonal2,
@@ -45,6 +46,7 @@ export function PresentControls({ onExit }: { onExit: () => void }) {
   const [activeTab, setActiveTab] = useState<PresentTab>('present');
   const [position, setPosition] = useState(DEFAULT_POSITION);
   const [size, setSize] = useState<PanelSize>(DEFAULT_SIZE);
+  const [outputFullscreen, setOutputFullscreen] = useState(true);
   const [busy, setBusy] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -258,6 +260,25 @@ export function PresentControls({ onExit }: { onExit: () => void }) {
     }
   };
 
+  const toggleOutputFullscreen = async () => {
+    if (busy) return;
+    const next = !outputFullscreen;
+    setBusy(true);
+    try {
+      await runtime.setFullscreen(next);
+      setOutputFullscreen(next);
+    } catch (error) {
+      pushToast({
+        title: 'Output window mode could not be changed',
+        detail: error instanceof Error ? error.message : 'The operating system did not change the output window.',
+        tone: 'warning',
+      });
+    } finally {
+      setBusy(false);
+      scheduleHide();
+    }
+  };
+
   const selectTab = (tab: PresentTab) => {
     setActiveTab(tab);
     scheduleHide();
@@ -345,11 +366,22 @@ export function PresentControls({ onExit }: { onExit: () => void }) {
                   className={`present-toggle${settings.transparency ? ' is-active' : ''}`}
                   aria-pressed={settings.transparency}
                   disabled={!runtime.isDesktop || busy}
-                  title={runtime.isDesktop ? 'Reveal the actual desktop and windows behind Freeform' : 'True transparency is available in the Windows desktop app'}
+                  title={runtime.isDesktop ? 'Switch between native output and a transparent overlay. Only the output reloads; the editor and workspace stay open.' : 'True transparency is available in the Windows desktop app'}
                   onClick={() => void toggleTransparency()}
                 >
                   <Monitor size={15} />
-                  <span>Transparent background<small>{runtime.isDesktop ? (settings.transparency ? 'Desktop visible' : 'Opaque') : 'Desktop app only'}</small></span>
+                  <span>Transparent background<small>{runtime.isDesktop ? (settings.transparency ? 'Desktop visible · overlay' : 'Opaque · native window') : 'Desktop app only'}</small></span>
+                </button>
+
+                <button
+                  className={`present-toggle${outputFullscreen ? ' is-active' : ''}`}
+                  aria-pressed={outputFullscreen}
+                  disabled={busy}
+                  title="Choose Windowed before dragging or resizing either native or transparent overlay output."
+                  onClick={() => void toggleOutputFullscreen()}
+                >
+                  {outputFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                  <span>{outputFullscreen ? 'Output fullscreen' : 'Output windowed'}<small>{outputFullscreen ? 'Switch to windowed' : 'Switch to fullscreen'}</small></span>
                 </button>
 
                 <button

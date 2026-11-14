@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
 import type { PointerEvent } from 'react';
 import { runtime } from '../lib/runtime';
+import { isNativePresentationWindow } from '../lib/windowRole';
 
-/** Moves the unlocked native output without altering workspace geometry. */
+/** Moves the unlocked output without altering workspace geometry. */
 export function WindowMoveSurface() {
   const activePointer = useRef<number | null>(null);
   const requests = useRef<Promise<unknown>>(Promise.resolve());
@@ -21,6 +22,10 @@ export function WindowMoveSurface() {
     activePointer.current = null;
     enqueue(() => runtime.endWindowMove());
   }, []);
+
+  if (isNativePresentationWindow) {
+    return <div aria-hidden="true" className="window-move-surface is-native" data-window-move="surface" />;
+  }
 
   const start = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || activePointer.current !== null) return;

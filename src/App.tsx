@@ -17,7 +17,7 @@ import { parseProject, reauthorizeProjectBackground, reauthorizeProjectFiles, se
 import { presentationTimeNeedsSync } from './lib/presentationMedia';
 import { readRecoveryGenerations, recordDiagnostic, writeRecoveryGeneration } from './lib/recovery';
 import { runtime } from './lib/runtime';
-import { isPresentationWindow } from './lib/windowRole';
+import { isNativePresentationWindow, isPresentationWindow } from './lib/windowRole';
 import { useWorkspace } from './store/useWorkspace';
 import type { PresentationMediaState } from './types';
 
@@ -368,7 +368,7 @@ export default function App() {
   const presenting = presentation || isPresentationWindow;
   const panelsHidden = presenting || controlsMinimized;
   return (
-    <div className={`app-shell${presenting ? ' is-presenting' : ''}${isPresentationWindow && presentSettings.transparency ? ' is-present-transparent' : ''}${controlsMinimized ? ' is-focus-mode' : ''}`} data-window-role={isPresentationWindow ? 'present' : 'editor'}>
+    <div className={`app-shell${presenting ? ' is-presenting' : ''}${isPresentationWindow && presentSettings.transparency ? ' is-present-transparent' : ''}${controlsMinimized ? ' is-focus-mode' : ''}`} data-window-role={isPresentationWindow ? 'present' : 'editor'} data-window-kind={isPresentationWindow ? (isNativePresentationWindow ? 'native' : 'overlay') : undefined}>
       <MediaLayer />
       {!panelsHidden && <TopBar onMinimizeAll={() => setControlsMinimized(true)} onPresent={enterPresentation} />}
       <div className={`app-body${leftPanelMinimized ? ' left-panel-minimized' : ''}${rightPanelMinimized ? ' right-panel-minimized' : ''}${controlsMinimized ? ' controls-minimized' : ''}`}>
@@ -389,7 +389,7 @@ export default function App() {
       {controlsMinimized && !presenting && <button className="restore-controls button" aria-label="Show control panels" title="Show control panels (Shift+F or Esc)" onClick={() => setControlsMinimized(false)}><Maximize2 size={14} />Show control panels <kbd>Shift+F</kbd></button>}
       {!isPresentationWindow && (presentWindowOpen || presentation) && <PresentControls onExit={exitPresentation} />}
       {isPresentationWindow && runtime.isDesktop && runtime.platform === 'win32' && !presentSettings.layoutLocked && <WindowMoveSurface />}
-      {isPresentationWindow && runtime.isDesktop && runtime.platform === 'win32' && <WindowResizeHandles />}
+      {isPresentationWindow && !isNativePresentationWindow && runtime.isDesktop && runtime.platform === 'win32' && <WindowResizeHandles />}
       <Toasts />
     </div>
   );
